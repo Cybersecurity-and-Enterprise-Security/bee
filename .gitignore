@@ -1,0 +1,6 @@
+# project binary
+/bee
+
+# go coverage reports
+coverage.cov
+coverage_unit.html

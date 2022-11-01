@@ -1,0 +1,37 @@
+default:
+  image: golang:latest
+
+stages:
+  - build
+  - lint
+  - test
+
+compile:
+  stage: build
+  needs: []
+  variables:
+    CGO_ENABLED: 0
+  script:
+    - make build
+  artifacts:
+    paths:
+      - bee
+    expire_in: 1 week
+
+golangci-lint:
+  stage: lint
+  needs: []
+  image: golangci/golangci-lint:latest
+  script:
+    - make golangci-lint
+
+test:
+  stage: test
+  needs: []
+  script:
+    - make coverhtml
+  artifacts:
+    paths:
+      - coverage_unit.html
+    expire_in: 1 week
+    expose_as: coverageReport
