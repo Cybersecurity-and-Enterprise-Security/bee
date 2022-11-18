@@ -2,19 +2,21 @@ package forward
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 
+	log "github.com/sirupsen/logrus"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/filter"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/socket"
 )
 
-// PACKET_BUFFER_SIZE is the buffer size allocated to receive one packet.
+// packetBufferSize is the buffer size allocated to receive one packet.
 // This value should be at least as large as the length of the largest expected
 // packet.
-const PACKET_BUFFER_SIZE = 4096
+const packetBufferSize = 4096
 
 // A Forwarder is responsible for relaying packets back and forth between the
 // socket and tunnel.
@@ -94,7 +96,7 @@ func (f *Forwarder) Forward(ctx context.Context) error {
 func (f *Forwarder) socketToTunnel(ctx context.Context) error {
 	var nRead, nWrite int
 	var err error
-	packet := make([]byte, PACKET_BUFFER_SIZE)
+	packet := make([]byte, packetBufferSize)
 
 	for {
 		if ctx.Err() != nil {
@@ -106,6 +108,11 @@ func (f *Forwarder) socketToTunnel(ctx context.Context) error {
 		if !f.receiveFilter.Matches(packet[:nRead]) {
 			continue
 		}
+
+		log.
+			WithField("data", hex.EncodeToString(packet[:nRead])).
+			Debug("Sending data to tunnel")
+
 		if nWrite, err = f.tunnel.Write(packet[:nRead]); err != nil {
 			return fmt.Errorf("write to tunnel: %s", err)
 		}
@@ -118,7 +125,7 @@ func (f *Forwarder) socketToTunnel(ctx context.Context) error {
 func (f *Forwarder) tunnelToSocket(ctx context.Context) error {
 	var nRead, nWrite int
 	var err error
-	packet := make([]byte, PACKET_BUFFER_SIZE)
+	packet := make([]byte, packetBufferSize)
 
 	for {
 		if ctx.Err() != nil {
@@ -130,6 +137,11 @@ func (f *Forwarder) tunnelToSocket(ctx context.Context) error {
 		if !f.sendFilter.Matches(packet[:nRead]) {
 			continue
 		}
+
+		log.
+			WithField("data", hex.EncodeToString(packet[:nRead])).
+			Debug("Sending data to socket")
+
 		if nWrite, err = f.socket.Write(packet[:nRead]); err != nil {
 			return fmt.Errorf("write to socket: %s", err)
 		}
