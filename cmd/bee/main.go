@@ -12,6 +12,10 @@ import (
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/forward"
 )
 
+func init() {
+	log.SetLevel(log.DebugLevel)
+}
+
 type arguments struct {
 	BindAddress    string
 	BeehiveAddress string
@@ -20,7 +24,7 @@ type arguments struct {
 func parseArgs() arguments {
 	var result arguments
 	flag.StringVar(&result.BindAddress, "bind", "", "address to bind listener to")
-	flag.StringVar(&result.BeehiveAddress, "beehive", "127.0.0.1:1337", "address of the beehive")
+	flag.StringVar(&result.BeehiveAddress, "beehive", "127.0.0.1:8335", "address of the beehive")
 	flag.Parse()
 
 	if result.BindAddress == "" {
@@ -37,7 +41,7 @@ func main() {
 	log.Info("Starting...")
 	err := run(args.BindAddress, args.BeehiveAddress)
 	if err != nil {
-		log.WithError(err).Fatal("failed to start")
+		log.WithError(err).Fatal("failed to run")
 	}
 	log.Info("Quitting...")
 }

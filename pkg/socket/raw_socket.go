@@ -7,19 +7,22 @@ import (
 	"syscall"
 )
 
-// PACKET_IGNORE_OUTGOING is the socket option for packet sockets to ignore
-// outgoing packets. Go's syscall package does not contain this constant :(
-const PACKET_IGNORE_OUTGOING = 23
+const (
+	// packetIgnoreOutgoing (PACKET_IGNORE_OUTGOING) is the socket option for
+	// packet sockets to ignore outgoing packets. Go's syscall package does not
+	// contain this constant :(
+	packetIgnoreOutgoing = 23
 
-// NETWORK_BYTEORDER_ETH_P_IP is the constant ETH_P_IP in big endian byte order.
-// For creating a packet(7) socket using the socket syscall, we need to specify
-// the protocol as a uint16 in network byte order. The manpage suggests using
-// the `htons` function from the C standard library on the defined constant.
-// Since Go doesn't provide a convenient way to convert from host byte order to
-// network byte order, this value is pre-calculated for the
-// syscall.ETH_P_IP = 2048 constant. 2048 = 0x0800 in little endian
-// and 0x0080 = 8 in big endian byte order.
-const NETWORK_BYTEORDER_ETH_P_IP = 8
+	// networkByteorderEthPIP is the constant ETH_P_IP in big endian byte order.
+	// For creating a packet(7) socket using the socket syscall, we need to specify
+	// the protocol as a uint16 in network byte order. The manpage suggests using
+	// the `htons` function from the C standard library on the defined constant.
+	// Since Go doesn't provide a convenient way to convert from host byte order to
+	// network byte order, this value is pre-calculated for the
+	// syscall.ETH_P_IP = 2048 constant. 2048 = 0x0800 in little endian
+	// and 0x0080 = 8 in big endian byte order.
+	networkByteorderEthPIP = 8
+)
 
 // A RawSocket is a socket capable of reading and writing arbitrary IP packets.
 // Because one raw IP socket only allows to receive one IP protocol (e.g. TCP,
@@ -75,27 +78,19 @@ func newSendingRawSocketIPv4(bindInterface *net.Interface) (io.WriteCloser, erro
 		return nil, fmt.Errorf("create raw socket (AF_INET, SOCK_RAW, IPPROTO_RAW): %w", err)
 	}
 
-	// Bind the socket to the device using Setsockopt and SO_BINDTODEVICE for
-	// raw sockets.
-	err = syscall.SetsockoptString(fd, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, bindInterface.Name)
-	if err != nil {
-		syscall.Close(fd)
-		return nil, fmt.Errorf("bind socket to device: %w", err)
-	}
-
 	return &socket{fd: fd}, nil
 }
 
 func newReceivingRawSocketIPv4(bindInterface *net.Interface) (io.ReadCloser, error) {
 
 	// This is a packet socket (see packet(7)). It receives all IPv4 packets.
-	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_DGRAM, NETWORK_BYTEORDER_ETH_P_IP)
+	fd, err := syscall.Socket(syscall.AF_PACKET, syscall.SOCK_DGRAM, networkByteorderEthPIP)
 	if err != nil {
 		return nil, fmt.Errorf("create raw socket (AF_PACKET, SOCK_DGRAM, ETH_P_IP): %w", err)
 	}
 
 	// We are not interested in outgoing packets.
-	err = syscall.SetsockoptInt(fd, syscall.SOL_PACKET, PACKET_IGNORE_OUTGOING, 1)
+	err = syscall.SetsockoptInt(fd, syscall.SOL_PACKET, packetIgnoreOutgoing, 1)
 	if err != nil {
 		syscall.Close(fd)
 		return nil, fmt.Errorf("set PACKET_IGNORE_OUTGOING on socket: %w", err)
