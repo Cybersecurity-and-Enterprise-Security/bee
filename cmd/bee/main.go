@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"syscall"
 
 	log "github.com/sirupsen/logrus"
+	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/apibee"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/forward"
 )
 
@@ -17,14 +19,16 @@ func init() {
 }
 
 type arguments struct {
-	BindAddress    string
-	BeehiveAddress string
+	BindAddress       string
+	BeehiveAddress    string
+	BeekeeperBasePath string
 }
 
 func parseArgs() arguments {
 	var result arguments
 	flag.StringVar(&result.BindAddress, "bind", "", "address to bind listener to")
 	flag.StringVar(&result.BeehiveAddress, "beehive", "127.0.0.1:8335", "address of the beehive")
+	flag.StringVar(&result.BeekeeperBasePath, "beekeeper", "http://127.0.0.1:3001/v1", "base path of the beekeeper")
 	flag.Parse()
 
 	if result.BindAddress == "" {
@@ -39,14 +43,20 @@ func main() {
 	args := parseArgs()
 
 	log.Info("Starting...")
-	err := run(args.BindAddress, args.BeehiveAddress)
+
+	err := run(args.BindAddress, args.BeehiveAddress, args.BeekeeperBasePath)
 	if err != nil {
 		log.WithError(err).Fatal("failed to run")
 	}
 	log.Info("Quitting...")
 }
 
-func run(bindAddress string, beehiveAddress string) error {
+func run(bindAddress string, beehiveAddress string, beekeeperBasePath string) error {
+	_, err := startBee(beekeeperBasePath)
+	if err != nil {
+		return fmt.Errorf("starting bee failed: %w", err)
+	}
+
 	forwarder, err := forward.NewForwarder(bindAddress, beehiveAddress)
 	if err != nil {
 		return fmt.Errorf("creating new forwarder: %w", err)
@@ -71,4 +81,39 @@ func run(bindAddress string, beehiveAddress string) error {
 	}
 
 	return nil
+}
+
+func startBee(beekeeperBasePath string) (*apibee.Bee, error) {
+	bee, err := apibee.NewBee(beekeeperBasePath)
+	if err != nil {
+		return nil, fmt.Errorf("creating new bee: %w", err)
+	}
+
+	if err := bee.LoadFromFile(); err != nil {
+		if errors.Is(err, apibee.ErrBeeConfigNotFound) {
+			log.Info("No existing bee config found")
+
+			var registrationToken string
+			fmt.Println("\nRegistering new endpoint. Please enter registration token: ")
+			if _, err := fmt.Scanln(&registrationToken); err != nil {
+				return nil, fmt.Errorf("reading registration token failed: %w", err)
+			}
+
+			if err := bee.Register(registrationToken); err != nil {
+				return nil, fmt.Errorf("registering bee failed: %w", err)
+			}
+
+			if err := bee.StoreToFile(); err != nil {
+				return nil, fmt.Errorf("storing bee to faile failed: %w", err)
+			}
+		}
+	}
+
+	name, err := bee.Name()
+	if err != nil {
+		return nil, fmt.Errorf("getting bee's name failed: %w", err)
+	}
+
+	log.WithField("name", name).Infof("Bee starting")
+	return bee, nil
 }

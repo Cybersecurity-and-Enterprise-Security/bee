@@ -1,0 +1,930 @@
+openapi: 3.0.0
+info:
+  contact:
+    name: Alvarium Master Project
+    url: 'https://cyber-threat-intelligence.com/'
+    email: MPWS2022CD1@hpi.de
+  description: Beekeeper API
+  version: 1.0.0
+  title: Beekeeper API
+  license:
+    name: TBD
+    url: TBD
+servers:
+  - url: '{protocol}://{environment}.beekeeper.gitlab-k8s-1.thebeelab.net/v1'
+    variables:
+      protocol:
+        default: https
+        enum:
+          - http
+          - https
+      environment:
+        default: production    # Production server
+        enum:
+          - production         # Production server
+          - staging            # Staging server
+
+  - url: 'http://localhost:3000/v1'
+    description: 'Local testing'
+    
+tags:
+  - name: endpoint
+    description: Endpoints that receive connections and forward the traffic to the routers
+  - name: router
+    description: Routers that create honeypots and forward the traffic from the endpoints to the honeypots
+  - name: user
+    description: Users which can use the honeynet via the GUI
+paths:
+  /authenticate:
+    post:
+      tags:
+        - user
+      summary: Authenticate User
+      description: Login at the beehive application. Returns the ID of a User and a JWT.
+      operationId: AuthenticateUser
+      responses:
+        '200':
+          description: successful operation
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: JWT=abcde12345; Path=/; HttpOnly
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  /endpoints:
+    get:
+      tags:
+        - endpoint
+      summary: Get all endpoints
+      description: Get all registered endpoints
+      operationId: FindEndpoints
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  endpoints:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Endpoint'
+                  count:
+                    type: integer
+    post:
+      tags:
+        - endpoint
+      summary: Create a new endpoint
+      description: Create a new endpoint which can then register itself with the server
+      operationId: CreateEndpoint
+      requestBody:
+        $ref: '#/components/requestBodies/EndpointJSON'
+      responses:
+        '201':
+          description: Endpoint created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  endpoint:
+                    $ref: '#/components/schemas/Endpoint'
+                  registrationToken:
+                    $ref: '#/components/schemas/EndpointRegistrationToken'
+  /endpoints/register:
+    post:
+      tags:
+        - endpoint
+      summary: Register a new endpoint
+      description: |
+        Given a valid registration token, this registers a new endpoint.
+        The endpoint receives a new permanent authentication token using which it can authenticate
+        to the API and e.g. receive its configuration.
+      operationId: RegisterEndpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                registrationToken:
+                  $ref: '#/components/schemas/EndpointRegistrationToken'
+              required:
+                - registrationToken
+      responses:
+        '201':
+          description: Endpoint registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    $ref: '#/components/schemas/EndpointID'
+                  authenticationToken:
+                    type: string
+                    description: A permanent authentication token that the endpoint uses to authenticate against the API.
+                required:
+                  - id
+                  - authenticationToken
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  '/endpoints/{endpointId}':
+    get:
+      tags:
+        - endpoint
+      summary: Find endpoint by ID
+      description: Returns a single endpoint
+      operationId: FindEndpoint
+      parameters:
+        - $ref: '#/components/parameters/EndpointIDParam'
+      responses:
+        '200':
+          description: Endpoint found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Endpoint'
+        '400':
+          description: Invalid ID supplied
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      tags:
+        - endpoint
+      summary: Updates a endpoint
+      description: Update an endpoint to change its configuration like exposed ports
+      operationId: UpdateEndpoint
+      parameters:
+        - $ref: '#/components/parameters/EndpointIDParam'
+      requestBody:
+        $ref: '#/components/requestBodies/EndpointJSON'
+      responses:
+        '200':
+          description: Update successfully
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    delete:
+      tags:
+        - endpoint
+      summary: Deletes an endpoint
+      description: Delete an endpoint
+      operationId: DeleteEndpoint
+      parameters:
+        - $ref: '#/components/parameters/EndpointIDParam'
+      responses:
+        '204':
+          description: Endpoint deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  '/endpoints/{endpointId}/config':
+    get:
+      tags:
+        - endpoint
+      summary: Get the configuration of an endpoint
+      description: |
+        Returns the configuration of an endpoint. This includes which traffic to forward and
+        where to forward the traffic to.
+      operationId: GetEndpointConfig
+      parameters:
+        - $ref: '#/components/parameters/EndpointIDParam'
+      responses:
+        '200':
+          description: Endpoint configuration generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointConfiguration'
+        '404':
+          description: Endpoint with given id not found
+  '/endpoints/{endpointId}/startup':
+    post:
+      tags:
+        - endpoint
+      summary: Start an endpoint
+      description: |
+        Starts an existing endpoint. This should be the first API call that an endpoint makes when
+        starting its operation. It will tell the API where the endpoint is located (e.g. public IP).
+      operationId: StartEndpoint
+      security:
+        - EndpointAuthentication: []
+      parameters:
+        - $ref: '#/components/parameters/EndpointIDParam'
+      responses:
+        '204':
+          description: Endpoint startup successful
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: Endpoint with given id not found
+  '/endpoints/{endpointId}/logs':
+    get:
+      tags:
+        - endpoint
+      summary: Get logs of an endpoint
+      description: Returns all the logs that an endpoint generated.
+      operationId: GetEndpointLogs
+      parameters:
+        - $ref: '#/components/parameters/EndpointIDParam'
+      responses:
+        '200':
+          description: Endpoint logs queried successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    post:
+      tags:
+        - endpoint
+      summary: Add a new log entry for an endpoint
+      description: Adds a new log entry for an endpoint. This can only be done by the endpoint itself.
+      operationId: AddEndpointLog
+      security:
+        - EndpointAuthentication: []
+      parameters:
+        - $ref: '#/components/parameters/EndpointIDParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndpointLog'
+      responses:
+        '204':
+          description: Endpoint log entry added successfully
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /routers:
+    get:
+      tags:
+        - router
+      summary: Get routers
+      description: Returns all routers which are registered at the backend
+      operationId: GetRouters
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  routers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Router'
+                  count:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags:
+        - router
+      summary: Create new router
+      description: Create a new router which can then register itself with the server
+      operationId: CreateRouter
+      requestBody:
+        $ref: '#/components/requestBodies/RouterJSON'
+      responses:
+        '201':
+          description: Router created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouterRegistrationToken'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '405':
+          $ref: '#/components/responses/InvalidInputError'
+  /routers/register:
+    post:
+      tags:
+        - router
+      summary: Register new router
+      description: |
+        Given a valid registration token, this registers a new router.
+        The router receives a new permanent authentication token using which it can authenticate
+        to the API and e.g. receive its configuration.
+      operationId: RegisterRouter
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouterRegistrationToken'
+      responses:
+        '201':
+          description: Router registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    $ref: '#/components/schemas/RouterID'
+                  authenticationToken:
+                    type: string
+                    description: A permanent authentication token that the router uses to authenticate against the API.
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  '/routers/{routerId}':
+    get:
+      tags:
+        - router
+      summary: Get router by ID
+      description: Returns a single router
+      operationId: GetRouterById
+      parameters:
+        - $ref: '#/components/parameters/RouterIDParam'
+      responses:
+        '200':
+          description: Router found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Router'
+        '400':
+          description: Invalid ID supplied
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '405':
+          $ref: '#/components/responses/InvalidInputError'
+    patch:
+      tags:
+        - router
+      summary: Update router by ID
+      description: Updates the router with the given ID with the provided information to change its configuration.
+      operationId: UpdateRouter
+      parameters:
+        - $ref: '#/components/parameters/RouterIDParam'
+      requestBody:
+        $ref: '#/components/requestBodies/RouterJSON'
+      responses:
+        '200':
+          description: Update successfully
+        '400':
+          description: Invalid ID supplied
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '405':
+          description: Invalid input
+    delete:
+      tags:
+        - router
+      summary: Deletes router by ID
+      description: Delete the router with the specified ID from the backend's database
+      operationId: DeleteRouter
+      parameters:
+        - $ref: '#/components/parameters/RouterIDParam'
+      responses:
+        '204':
+          description: router deleted successfully
+        '400':
+          description: invalid ID supplied
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '405':
+          $ref: '#/components/responses/InvalidInputError'
+  '/routers/{routerId}/startup':
+    post:
+      summary: Router startup API-Endpoint
+      description: Starts an existing router. This is the first API call of a previously registered router when starting its operation. It will tell the API where the route is located (e.g. public IP).
+      tags:
+        - router
+      parameters:
+        - $ref: '#/components/parameters/RouterIDParam'
+      responses:
+        '204':
+          description: Router startup successful
+        '400':
+          description: invalid ID supplied
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+      operationId: postRouterStartupStatusById
+      security:
+        - RouterAuthentication: []
+  '/routers/{routerId}/config':
+    get:
+      summary: Get router config
+      description: Returns the configuartion of the router with the specified ID.
+      tags:
+        - router
+      parameters:
+        - $ref: '#/components/parameters/RouterIDParam'
+      responses:
+        '200':
+          description: Router configuration generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouterConfiguration'
+        '400':
+          description: invalid ID supplied
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+      operationId: 'getRouterConfigById:'
+  '/routers/{routerId}/logs':
+    get:
+      summary: Get logs of a router
+      description: Returns all logs that a router generated.
+      tags:
+        - router
+      parameters:
+        - $ref: '#/components/parameters/RouterIDParam'
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  endpoints:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RouterLog'
+        '400':
+          description: invalid ID supplied
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+      operationId: getRouterLogsById
+    post:
+      summary: Add new logline
+      description: API-Endpoint to post to when a router shares logs
+      tags:
+        - router
+      parameters:
+        - $ref: '#/components/parameters/RouterIDParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouterLog'
+      responses:
+        '204':
+          description: Router log entry added successfully
+        '400':
+          description: invalid ID supplied
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+      operationId: postRouterLogsById
+      security:
+        - EndpointAuthentication: []
+  '/routers/{routerId}/metrics':
+    get:
+      summary: Get logs of a router
+      description: Returns all logs that a router generated.
+      tags:
+        - router
+      parameters:
+        - $ref: '#/components/parameters/RouterIDParam'
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  endpoints:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RouterMetrics'
+        '400':
+          description: invalid ID supplied
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+      operationId: getRouterMetricsById
+    post:
+      summary: Router metrics API-Endpoint
+      description: API-Endpoint to post to when a router shares metrics
+      tags:
+        - router
+      parameters:
+        - $ref: '#/components/parameters/RouterIDParam'
+      responses:
+        '204':
+          description: metrics submitted successfully
+        '400':
+          description: invalid ID supplied
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+      operationId: postRouterMetricsById
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouterMetrics'
+  /users:
+    get:
+      tags:
+        - user
+      summary: Get all users
+      description: Gets all registered users to display them for the administrator in the GUI
+      operationId: ShowAllRegisteredUsers
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  count:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags:
+        - user
+      summary: Create new user
+      description: Creates a new user which can interact with the honeynet GUI.
+      operationId: AddNewUser
+      security:
+        - EndpointAuthentication: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '204':
+          description: User created successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+  '/users/{userId}':
+    get:
+      summary: Get user information by ID
+      description: Returns information about a specific user
+      operationId: ShowUserInformationById
+      tags:
+        - user
+      parameters:
+        - $ref: '#/components/parameters/UserIDParam'
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    patch:
+      tags:
+        - user
+      summary: Update user information
+      description: Update information of a specific user
+      operationId: UpdateUser
+      parameters:
+        - $ref: '#/components/parameters/UserIDParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '405':
+          $ref: '#/components/responses/InvalidInputError'
+    delete:
+      tags:
+        - user
+      summary: Deletes a user
+      description: Delete a user
+      operationId: DeleteUser
+      parameters:
+        - name: userId
+          in: path
+          description: endpoint id to delete
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Successful
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  '/users/{userId}/endpoints':
+    get:
+      summary: Get endpoints of user
+      description: Returns all endpoints the requested user has created and registered
+      operationId: ShowUserEndpoints
+      tags:
+        - router
+      parameters:
+        - $ref: '#/components/parameters/UserIDParam'
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  endpoints:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Endpoint'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '405':
+          $ref: '#/components/responses/InvalidInputError'
+  '/users/{userId}/routers':
+    get:
+      summary: Get routers of a user
+      description: TODO
+      operationId: ShowUserRouters
+      tags:
+        - router
+      parameters:
+        - $ref: '#/components/parameters/UserIDParam'
+      responses:
+        '200':
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  endpoints:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Router'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '405':
+          $ref: '#/components/responses/InvalidInputError'
+components:
+  securitySchemes:
+    EndpointAuthentication:
+      type: http
+      scheme: bearer
+      description: The authentication by endpoints using the authentication token received on registration.
+    RouterAuthentication:
+      type: http
+      scheme: bearer
+      description: The authentication by routers using the authentication token received on registration.
+    UserAuthentication:
+      type: http
+      scheme: bearer
+      description: The authentication by a user using the authentication token received on registration.
+  parameters:
+    EndpointIDParam:
+      name: endpointId
+      in: path
+      description: ID of the endpoint to operate on
+      required: true
+      schema:
+        $ref: '#/components/schemas/EndpointID'
+    RouterIDParam:
+      name: routerId
+      in: path
+      description: ID of the router to operate on
+      required: true
+      schema:
+        $ref: '#/components/schemas/RouterID'
+    UserIDParam:
+      name: userId
+      in: path
+      description: ID of the user to operate on
+      required: true
+      schema:
+        $ref: '#/components/schemas/UserID'
+  requestBodies:
+    EndpointJSON:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+      description: Endpoint to be created
+      required: true
+    RouterJSON:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+      description: Router to be created
+      required: true
+    UserJSON:
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+              group:
+                type: string
+      description: Endpoint to be created
+      required: true
+  schemas:
+    EndpointID:
+      type: string
+      format: UUID
+      description: The unique identifier of an endpoint
+    Endpoint:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          $ref: '#/components/schemas/EndpointID'
+        name:
+          type: string
+        description:
+          type: string
+        isRegistered:
+          type: boolean
+          description: Shows whether the endpoint has been registered already.
+    EndpointRegistrationToken:
+      type: string
+      description: A single-use token that is handed to the endpoint for registration.
+    EndpointConfiguration:
+      type: object
+      description: The configuration of an endpoint.
+      properties:
+        router:
+          type: string
+          format: 'host:port'
+          description: The router that the endpoint should forward its traffic to.
+        trafficFilters:
+          description: Traffic forwarding rules that the endpoint should follow.
+          type: array
+          items:
+            $ref: '#/components/schemas/EndpointTrafficFilter'
+    EndpointTrafficFilter:
+      type: object
+      description: A traffic filter that an endpoint should follow when forwarding traffic to a router.
+      properties:
+        protocol:
+          description: The protocol to filter on.
+          type: string
+          enum:
+            - icmp
+            - tcp
+            - udp
+        filter:
+          type: string
+          description: A protocol specific filter.
+          example: port=80
+    EndpointLog:
+      type: object
+      description: A log entry of an endpoint.
+      properties:
+        entry:
+          type: string
+          description: The log entry
+          example: Received new connection from 1.1.1.1
+    Router:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          $ref: '#/components/schemas/RouterID'
+        name:
+          type: string
+        description:
+          type: string
+    RouterID:
+      type: string
+      format: UUID
+      description: The unique identifier of a router
+    RouterRegistrationToken:
+      type: object
+      description: A single-use token that is handed to the router for registration.
+      required:
+        - registrationToken
+      properties:
+        registrationToken:
+          type: string
+          description: The registration token endpoint for registration.
+    RouterConfiguration:
+      type: object
+      description: The configuration of an endpoint.
+      properties:
+        router:
+          type: string
+          format: 'host:port'
+          description: The router that the endpoint should forward its traffic to.
+        trafficFilters:
+          description: Traffic forwarding rules that the endpoint should follow.
+          type: array
+          items:
+            $ref: '#/components/schemas/EndpointTrafficFilter'
+    RouterLog:
+      type: object
+      description: A log entry of a router.
+      properties:
+        entry:
+          type: string
+          description: The log entry
+          example: Received new connection from Endpoint X.X.X.X
+    RouterMetrics:
+      type: object
+      description: A metrics entry entry of a router.
+      properties:
+        entry:
+          type: string
+          description: The metrics entry
+          example: Received new connection from Endpoint X.X.X.X
+    UserID:
+      type: string
+      format: UUID
+      description: The unique identifier of a user
+    UserGroup:
+      type: string
+      description: the usergroup a given user is a member of
+      example: 'admin, researcher'
+    User:
+      type: object
+      required:
+        - id
+        - group
+      properties:
+        id:
+          $ref: '#/components/schemas/UserID'
+        group:
+          $ref: '#/components/schemas/UserGroup'
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+  responses:
+    BadRequestError:
+      description: The supplied input is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnauthorizedError:
+      description: Access token is missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFoundError:
+      description: Object with the given ID not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InvalidInputError:
+      description: Malformed request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

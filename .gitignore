@@ -4,3 +4,9 @@
 # go coverage reports
 coverage.cov
 coverage_unit.html
+
+# Bee Store
+bee.store
+
+# generated code
+*.gen.go
