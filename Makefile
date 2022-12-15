@@ -24,8 +24,15 @@ upgrade-deps: ## Upgrade the dependencies
 tidy-deps: ## Remove unused dependencies
 	@go mod tidy
 
+generate-deps:
+	go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
+
+.PHONY: generate
+generate: generate-deps ## Generate Go code
+	go generate ./...
+
 .PHONY: build
-build: deps ## Build the binary
+build: deps generate ## Build the binary
 	@go build -o $(PROJECT_NAME) -v $(PKG)
 
 .PHONY: clean
@@ -42,18 +49,18 @@ golangci-lint: ## Lint the source code using golangci-lint
 	@golangci-lint run ./... --timeout=3m
 
 .PHONY: lint
-lint: golangci-lint ## Lint the source code using all linters
+lint: generate golangci-lint ## Lint the source code using all linters
 
 .PHONY: test
-test: deps ## Run unit tests
+test: deps generate ## Run unit tests
 	@go test -count=1 -short $(UNIT_TESTS)
 
 .PHONY: race
-race: deps ## Run data race detector
+race: deps generate ## Run data race detector
 	@go test -race -count=1 -short $(UNIT_TESTS)
 
 .PHONY: coverage
-coverage: deps ## Generate code coverage report
+coverage: deps generate ## Generate code coverage report
 	@go test $(UNIT_TESTS) -v -coverprofile coverage.cov
 	@go tool cover -func=coverage.cov
 

@@ -1,0 +1,7 @@
+output: beekeeper.gen.go
+package: api
+generate:
+  - types
+  - client
+include-tags:
+  - endpoint

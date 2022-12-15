@@ -23,7 +23,7 @@ golangci-lint:
   needs: []
   image: golangci/golangci-lint:latest
   script:
-    - make golangci-lint
+    - make lint
 
 test:
   stage: test
