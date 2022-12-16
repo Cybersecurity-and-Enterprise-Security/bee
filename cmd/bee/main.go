@@ -39,6 +39,10 @@ func parseArgs() arguments {
 	return result
 }
 
+func init() {
+    log.SetLevel(log.DebugLevel)
+}
+
 func main() {
 	args := parseArgs()
 

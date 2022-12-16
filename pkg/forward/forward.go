@@ -103,7 +103,7 @@ func (f *Forwarder) socketToTunnel(ctx context.Context) error {
 			return nil
 		}
 		if nRead, err = f.socket.Read(packet); err != nil {
-			return fmt.Errorf("read from socket: %s", err)
+			return fmt.Errorf("read from socket: %w", err)
 		}
 		if !f.receiveFilter.Matches(packet[:nRead]) {
 			continue
@@ -114,7 +114,7 @@ func (f *Forwarder) socketToTunnel(ctx context.Context) error {
 			Debug("Sending data to tunnel")
 
 		if nWrite, err = f.tunnel.Write(packet[:nRead]); err != nil {
-			return fmt.Errorf("write to tunnel: %s", err)
+			return fmt.Errorf("write to tunnel: %w", err)
 		}
 		if nWrite != nRead {
 			return errors.New("socketToTunnel: could not write full packet")
@@ -132,7 +132,7 @@ func (f *Forwarder) tunnelToSocket(ctx context.Context) error {
 			return nil
 		}
 		if nRead, err = f.tunnel.Read(packet); err != nil {
-			return fmt.Errorf("read from tunnel: %s", err)
+			return fmt.Errorf("read from tunnel: %w", err)
 		}
 		if !f.sendFilter.Matches(packet[:nRead]) {
 			continue
@@ -143,7 +143,7 @@ func (f *Forwarder) tunnelToSocket(ctx context.Context) error {
 			Debug("Sending data to socket")
 
 		if nWrite, err = f.socket.Write(packet[:nRead]); err != nil {
-			return fmt.Errorf("write to socket: %s", err)
+			return fmt.Errorf("write to socket: %w", err)
 		}
 		if nWrite != nRead {
 			return errors.New("tunnelToSocket: could not write full packet")
