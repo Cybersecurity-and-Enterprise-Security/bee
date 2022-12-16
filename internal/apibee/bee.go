@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/deepmap/oapi-codegen/pkg/securityprovider"
+	"github.com/google/uuid"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/api"
 )
 
@@ -24,8 +25,8 @@ type BeeConfiguration struct {
 
 type Bee struct {
 	client              *api.Client
-	ID                  string `json:"id"`
-	AuthenticationToken string `json:"authentication_token"`
+	ID                  uuid.UUID `json:"id"`
+	AuthenticationToken string    `json:"authentication_token"`
 }
 
 func NewBee(beekeeperBasePath string) (*Bee, error) {
