@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/deepmap/oapi-codegen/pkg/securityprovider"
 	"github.com/google/uuid"
@@ -13,8 +14,9 @@ import (
 )
 
 const (
-	beeStoreFileName = "bee.store"
-	beeStoreFileMode = 0600
+	beeStoreFileName  = "bee.store"
+	beeStoreFileMode  = 0600
+	heartbeatInterval = 1 * time.Minute
 )
 
 var ErrBeeConfigNotFound = errors.New("bee config not found")
@@ -101,6 +103,25 @@ func (b *Bee) Register(registrationToken string) error {
 	return nil
 }
 
+func (b *Bee) ReportStats() error {
+	ctx := context.Background()
+	response, err := b.client.AddEndpointStats(ctx, b.ID, api.AddEndpointStatsJSONRequestBody{})
+	if err != nil {
+		return fmt.Errorf("reporting stats to beekeeper: %w", err)
+	}
+
+	addEndpointStatsResponse, err := api.ParseAddEndpointStatsResponse(response)
+	if err != nil {
+		return fmt.Errorf("parsing stats reporting response: %w", err)
+	}
+
+	if addEndpointStatsResponse.StatusCode() != 204 {
+		return fmt.Errorf("received %d from API: %s", addEndpointStatsResponse.StatusCode(), addEndpointStatsResponse.Body)
+	}
+
+	return nil
+}
+
 func (b *Bee) Name() (string, error) {
 	ctx := context.Background()
 	response, err := b.client.FindEndpoint(ctx, b.ID)
@@ -118,4 +139,19 @@ func (b *Bee) Name() (string, error) {
 	}
 
 	return findEndpointResponse.JSON200.Name, nil
+}
+
+// Heartbeat periodically reports stats to the beehive until ctx is cancelled.
+func (b *Bee) Heartbeat(ctx context.Context) error {
+	for {
+		if err := b.ReportStats(); err != nil {
+			log.WithError(err).Warn("Error during heartbeat")
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(heartbeatInterval):
+		}
+	}
 }

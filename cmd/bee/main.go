@@ -39,10 +39,6 @@ func parseArgs() arguments {
 	return result
 }
 
-func init() {
-    log.SetLevel(log.DebugLevel)
-}
-
 func main() {
 	args := parseArgs()
 
@@ -56,7 +52,7 @@ func main() {
 }
 
 func run(bindAddress string, beehiveAddress string, beekeeperBasePath string) error {
-	_, err := startBee(beekeeperBasePath)
+	bee, err := startBee(beekeeperBasePath)
 	if err != nil {
 		return fmt.Errorf("starting bee failed: %w", err)
 	}
@@ -74,6 +70,12 @@ func run(bindAddress string, beehiveAddress string, beekeeperBasePath string) er
 
 	go func() {
 		if err := forwarder.Forward(ctx); err != nil {
+			errorChannel <- err
+		}
+	}()
+
+	go func() {
+		if err := bee.Heartbeat(ctx); err != nil {
 			errorChannel <- err
 		}
 	}()
