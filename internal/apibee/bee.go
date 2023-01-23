@@ -10,6 +10,7 @@ import (
 
 	"github.com/deepmap/oapi-codegen/pkg/securityprovider"
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/api"
 )
 
@@ -31,6 +32,43 @@ type Bee struct {
 	AuthenticationToken string    `json:"authentication_token"`
 }
 
+func LoadOrRegisterBee(beekeeperBaseURL string) (*Bee, error) {
+	bee, err := NewBee(beekeeperBaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("creating new bee: %w", err)
+	}
+
+	if err := bee.loadFromFile(); err != nil {
+		if errors.Is(err, ErrBeeConfigNotFound) {
+			log.Info("No bee config found")
+
+			var registrationToken string
+			fmt.Println("\nRegistering new bee. Please enter the registration token: ")
+			if _, err := fmt.Scanln(&registrationToken); err != nil {
+				return nil, fmt.Errorf("reading registration token: %w", err)
+			}
+
+			if err := bee.register(registrationToken); err != nil {
+				return nil, fmt.Errorf("registration: %w", err)
+			}
+
+			if err := bee.storeToFile(); err != nil {
+				return nil, fmt.Errorf("storing bee to file: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("loading configuration from file: %w", err)
+		}
+	}
+
+	apiKeyProvider, err := securityprovider.NewSecurityProviderApiKey("header", "X-API-KEY", bee.AuthenticationToken)
+	if err != nil {
+		return nil, fmt.Errorf("creating api key security provider: %w", err)
+	}
+	bee.client.RequestEditors = append(bee.client.RequestEditors, apiKeyProvider.Intercept)
+
+	return bee, nil
+}
+
 func NewBee(beekeeperBasePath string) (*Bee, error) {
 	client, err := api.NewClient(beekeeperBasePath)
 	if err != nil {
@@ -42,7 +80,7 @@ func NewBee(beekeeperBasePath string) (*Bee, error) {
 	}, nil
 }
 
-func (b *Bee) StoreToFile() error {
+func (b *Bee) storeToFile() error {
 	content, err := json.Marshal(b)
 	if err != nil {
 		return fmt.Errorf("marshaling bee failed: %w", err)
@@ -54,7 +92,7 @@ func (b *Bee) StoreToFile() error {
 	return nil
 }
 
-func (b *Bee) LoadFromFile() error {
+func (b *Bee) loadFromFile() error {
 	content, err := os.ReadFile(beeStoreFileName)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -70,7 +108,7 @@ func (b *Bee) LoadFromFile() error {
 	return nil
 }
 
-func (b *Bee) Register(registrationToken string) error {
+func (b *Bee) register(registrationToken string) error {
 	ctx := context.Background()
 	response, err := b.client.RegisterEndpoint(ctx, api.RegisterEndpointJSONRequestBody{RegistrationToken: registrationToken})
 	if err != nil {
@@ -91,7 +129,7 @@ func (b *Bee) Register(registrationToken string) error {
 	}
 
 	b.ID = registerEndpointResponse.JSON201.Id
-	b.AuthenticationToken = registerEndpointResponse.JSON201.AuthenticationToken
+	b.AuthenticationToken = registerEndpointResponse.JSON201.ApiKey
 
 	authenticationTokenProvider, err := securityprovider.NewSecurityProviderBearerToken(b.AuthenticationToken)
 	if err != nil {
