@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -39,10 +38,6 @@ func parseArgs() arguments {
 	return result
 }
 
-func init() {
-    log.SetLevel(log.DebugLevel)
-}
-
 func main() {
 	args := parseArgs()
 
@@ -56,7 +51,7 @@ func main() {
 }
 
 func run(bindAddress string, beehiveAddress string, beekeeperBasePath string) error {
-	_, err := startBee(beekeeperBasePath)
+	bee, err := startBee(beekeeperBasePath)
 	if err != nil {
 		return fmt.Errorf("starting bee failed: %w", err)
 	}
@@ -78,6 +73,12 @@ func run(bindAddress string, beehiveAddress string, beekeeperBasePath string) er
 		}
 	}()
 
+	go func() {
+		if err := bee.Heartbeat(ctx); err != nil {
+			errorChannel <- err
+		}
+	}()
+
 	select {
 	case <-signalChannel:
 	case err := <-errorChannel:
@@ -88,29 +89,9 @@ func run(bindAddress string, beehiveAddress string, beekeeperBasePath string) er
 }
 
 func startBee(beekeeperBasePath string) (*apibee.Bee, error) {
-	bee, err := apibee.NewBee(beekeeperBasePath)
+	bee, err := apibee.LoadOrRegisterBee(beekeeperBasePath)
 	if err != nil {
-		return nil, fmt.Errorf("creating new bee: %w", err)
-	}
-
-	if err := bee.LoadFromFile(); err != nil {
-		if errors.Is(err, apibee.ErrBeeConfigNotFound) {
-			log.Info("No existing bee config found")
-
-			var registrationToken string
-			fmt.Println("\nRegistering new endpoint. Please enter registration token: ")
-			if _, err := fmt.Scanln(&registrationToken); err != nil {
-				return nil, fmt.Errorf("reading registration token failed: %w", err)
-			}
-
-			if err := bee.Register(registrationToken); err != nil {
-				return nil, fmt.Errorf("registering bee failed: %w", err)
-			}
-
-			if err := bee.StoreToFile(); err != nil {
-				return nil, fmt.Errorf("storing bee to faile failed: %w", err)
-			}
-		}
+		return nil, fmt.Errorf("starting bee: %w", err)
 	}
 
 	name, err := bee.Name()

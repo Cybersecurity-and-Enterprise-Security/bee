@@ -1,6 +1,9 @@
 default:
   image: golang:latest
 
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
 stages:
   - build
   - lint

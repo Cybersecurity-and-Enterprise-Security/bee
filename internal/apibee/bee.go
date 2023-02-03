@@ -6,14 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/deepmap/oapi-codegen/pkg/securityprovider"
+	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/api"
 )
 
 const (
-	beeStoreFileName = "bee.store"
-	beeStoreFileMode = 0600
+	beeStoreFileName  = "bee.store"
+	beeStoreFileMode  = 0600
+	heartbeatInterval = 1 * time.Minute
 )
 
 var ErrBeeConfigNotFound = errors.New("bee config not found")
@@ -24,8 +28,45 @@ type BeeConfiguration struct {
 
 type Bee struct {
 	client              *api.Client
-	ID                  string `json:"id"`
-	AuthenticationToken string `json:"authentication_token"`
+	ID                  uuid.UUID `json:"id"`
+	AuthenticationToken string    `json:"authentication_token"`
+}
+
+func LoadOrRegisterBee(beekeeperBaseURL string) (*Bee, error) {
+	bee, err := NewBee(beekeeperBaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("creating new bee: %w", err)
+	}
+
+	if err := bee.loadFromFile(); err != nil {
+		if errors.Is(err, ErrBeeConfigNotFound) {
+			log.Info("No bee config found")
+
+			var registrationToken string
+			fmt.Println("\nRegistering new bee. Please enter the registration token: ")
+			if _, err := fmt.Scanln(&registrationToken); err != nil {
+				return nil, fmt.Errorf("reading registration token: %w", err)
+			}
+
+			if err := bee.register(registrationToken); err != nil {
+				return nil, fmt.Errorf("registration: %w", err)
+			}
+
+			if err := bee.storeToFile(); err != nil {
+				return nil, fmt.Errorf("storing bee to file: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("loading configuration from file: %w", err)
+		}
+	}
+
+	apiKeyProvider, err := securityprovider.NewSecurityProviderApiKey("header", "X-API-KEY", bee.AuthenticationToken)
+	if err != nil {
+		return nil, fmt.Errorf("creating api key security provider: %w", err)
+	}
+	bee.client.RequestEditors = append(bee.client.RequestEditors, apiKeyProvider.Intercept)
+
+	return bee, nil
 }
 
 func NewBee(beekeeperBasePath string) (*Bee, error) {
@@ -39,7 +80,7 @@ func NewBee(beekeeperBasePath string) (*Bee, error) {
 	}, nil
 }
 
-func (b *Bee) StoreToFile() error {
+func (b *Bee) storeToFile() error {
 	content, err := json.Marshal(b)
 	if err != nil {
 		return fmt.Errorf("marshaling bee failed: %w", err)
@@ -51,7 +92,7 @@ func (b *Bee) StoreToFile() error {
 	return nil
 }
 
-func (b *Bee) LoadFromFile() error {
+func (b *Bee) loadFromFile() error {
 	content, err := os.ReadFile(beeStoreFileName)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -67,7 +108,7 @@ func (b *Bee) LoadFromFile() error {
 	return nil
 }
 
-func (b *Bee) Register(registrationToken string) error {
+func (b *Bee) register(registrationToken string) error {
 	ctx := context.Background()
 	response, err := b.client.RegisterEndpoint(ctx, api.RegisterEndpointJSONRequestBody{RegistrationToken: registrationToken})
 	if err != nil {
@@ -88,7 +129,7 @@ func (b *Bee) Register(registrationToken string) error {
 	}
 
 	b.ID = registerEndpointResponse.JSON201.Id
-	b.AuthenticationToken = registerEndpointResponse.JSON201.AuthenticationToken
+	b.AuthenticationToken = registerEndpointResponse.JSON201.ApiKey
 
 	authenticationTokenProvider, err := securityprovider.NewSecurityProviderBearerToken(b.AuthenticationToken)
 	if err != nil {
@@ -96,6 +137,25 @@ func (b *Bee) Register(registrationToken string) error {
 	}
 
 	b.client.RequestEditors = append(b.client.RequestEditors, authenticationTokenProvider.Intercept)
+
+	return nil
+}
+
+func (b *Bee) ReportStats() error {
+	ctx := context.Background()
+	response, err := b.client.AddEndpointStats(ctx, b.ID, api.AddEndpointStatsJSONRequestBody{})
+	if err != nil {
+		return fmt.Errorf("reporting stats to beekeeper: %w", err)
+	}
+
+	addEndpointStatsResponse, err := api.ParseAddEndpointStatsResponse(response)
+	if err != nil {
+		return fmt.Errorf("parsing stats reporting response: %w", err)
+	}
+
+	if addEndpointStatsResponse.StatusCode() != 204 {
+		return fmt.Errorf("received %d from API: %s", addEndpointStatsResponse.StatusCode(), addEndpointStatsResponse.Body)
+	}
 
 	return nil
 }
@@ -117,4 +177,19 @@ func (b *Bee) Name() (string, error) {
 	}
 
 	return findEndpointResponse.JSON200.Name, nil
+}
+
+// Heartbeat periodically reports stats to the beehive until ctx is cancelled.
+func (b *Bee) Heartbeat(ctx context.Context) error {
+	for {
+		if err := b.ReportStats(); err != nil {
+			log.WithError(err).Warn("Error during heartbeat")
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(heartbeatInterval):
+		}
+	}
 }
