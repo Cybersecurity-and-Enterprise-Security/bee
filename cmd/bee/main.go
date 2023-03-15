@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,23 +19,25 @@ func init() {
 }
 
 type arguments struct {
-	BindAddress       string
-	BeehiveAddress    string
+	BindAddress       netip.Addr
 	BeekeeperBasePath string
 }
 
 func parseArgs() arguments {
 	var result arguments
-	flag.StringVar(&result.BindAddress, "bind", "", "address to bind listener to")
-	flag.StringVar(&result.BeehiveAddress, "beehive", "127.0.0.1:8335", "address of the beehive")
+	var bindAddress string
+
+	flag.StringVar(&bindAddress, "bind", "", "address to bind listener to")
 	flag.StringVar(&result.BeekeeperBasePath, "beekeeper", "http://127.0.0.1:3001/v1", "base path of the beekeeper")
 	flag.Parse()
 
-	if result.BindAddress == "" {
+	if bindAddress == "" {
 		fmt.Fprintln(os.Stderr, "You need to specify a bind address using -bind.")
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	result.BindAddress = netip.MustParseAddr(bindAddress)
 	return result
 }
 
@@ -43,20 +46,20 @@ func main() {
 
 	log.Info("Starting...")
 
-	err := run(args.BindAddress, args.BeehiveAddress, args.BeekeeperBasePath)
+	err := run(args.BindAddress, args.BeekeeperBasePath)
 	if err != nil {
 		log.WithError(err).Fatal("failed to run")
 	}
 	log.Info("Quitting...")
 }
 
-func run(bindAddress string, beehiveAddress string, beekeeperBasePath string) error {
+func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	bee, err := startBee(beekeeperBasePath)
 	if err != nil {
 		return fmt.Errorf("starting bee failed: %w", err)
 	}
 
-	forwarder, err := forward.NewForwarder(bindAddress, beehiveAddress)
+	forwarder, err := forward.NewForwarder(bindAddress)
 	if err != nil {
 		return fmt.Errorf("creating new forwarder: %w", err)
 	}
@@ -68,7 +71,13 @@ func run(bindAddress string, beehiveAddress string, beekeeperBasePath string) er
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		if err := forwarder.Forward(ctx); err != nil {
+		if err := forwarder.AttackerToBeehiveLoop(ctx); err != nil {
+			errorChannel <- err
+		}
+	}()
+
+	go func() {
+		if err := forwarder.BeehiveToAttackerLoop(ctx); err != nil {
 			errorChannel <- err
 		}
 	}()

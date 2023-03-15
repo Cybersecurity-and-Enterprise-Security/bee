@@ -13,3 +13,6 @@ require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	golang.org/x/sys v0.2.0 // indirect
 )
+
+// Until all the functionality from https://github.com/konradh/gopacket are in a release.
+replace github.com/google/gopacket => github.com/konradh/gopacket v0.0.0-20230315132540-4626c973decb
