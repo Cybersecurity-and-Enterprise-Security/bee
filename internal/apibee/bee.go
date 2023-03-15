@@ -110,12 +110,12 @@ func (b *Bee) loadFromFile() error {
 
 func (b *Bee) register(registrationToken string) error {
 	ctx := context.Background()
-	response, err := b.client.RegisterEndpoint(ctx, api.RegisterEndpointJSONRequestBody{RegistrationToken: registrationToken})
+	response, err := b.client.RegisterNewEndpoint(ctx, api.RegisterNewEndpointJSONRequestBody{RegistrationToken: registrationToken})
 	if err != nil {
 		return fmt.Errorf("registering endpoint on API failed: %w", err)
 	}
 
-	registerEndpointResponse, err := api.ParseRegisterEndpointResponse(response)
+	registerEndpointResponse, err := api.ParseRegisterNewEndpointResponse(response)
 	if err != nil {
 		return fmt.Errorf("parsing registration response failed: %w", err)
 	}
