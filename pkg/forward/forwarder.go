@@ -25,12 +25,12 @@ type Forwarder struct {
 
 	defragger *ip4defrag.IPv4Defragmenter // Defragmentation for IPv4 packets.
 
-	wireguardBeehiveAddress netip.AddrPort // (temporary) WireGuard address of the beehive
+	beehiveGeneveAddress netip.AddrPort // (temporary) WireGuard Geneve address of the beehive
 }
 
 func NewForwarder(bind netip.Addr) (*Forwarder, error) {
 	wireguardAddress := netip.MustParseAddr("10.255.2.1")
-	wireguardBeehiveAddress := netip.AddrPortFrom(netip.MustParseAddr("10.255.1.1"), WireguardPort)
+	beehiveGeneveAddress := netip.AddrPortFrom(netip.MustParseAddr("10.255.1.1"), GenevePort)
 
 	iface, err := interfaceOfAddress(bind)
 	if err != nil {
@@ -76,13 +76,13 @@ func NewForwarder(bind netip.Addr) (*Forwarder, error) {
 	}
 
 	return &Forwarder{
-		attackerCapture:         attackerCapture,
-		attackerInjectFd:        fd,
-		beehiveConn:             beehiveConn,
-		defragger:               ip4defrag.NewIPv4Defragmenter(),
-		listenAddress:           bind,
-		wireguardAddress:        wireguardAddress,
-		wireguardBeehiveAddress: wireguardBeehiveAddress,
+		attackerCapture:      attackerCapture,
+		attackerInjectFd:     fd,
+		beehiveConn:          beehiveConn,
+		defragger:            ip4defrag.NewIPv4Defragmenter(),
+		listenAddress:        bind,
+		wireguardAddress:     wireguardAddress,
+		beehiveGeneveAddress: beehiveGeneveAddress,
 	}, nil
 }
 
@@ -164,7 +164,7 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 		}
 
 		// TODO: perform beehive address lookup by (destination address, ip protocol, port?)
-		if _, err := f.beehiveConn.WriteToUDP(buffer.Bytes(), net.UDPAddrFromAddrPort(f.wireguardBeehiveAddress)); err != nil {
+		if _, err := f.beehiveConn.WriteToUDP(buffer.Bytes(), net.UDPAddrFromAddrPort(f.beehiveGeneveAddress)); err != nil {
 			return fmt.Errorf("send packet to beehive: %w", err)
 		}
 	}
