@@ -28,9 +28,8 @@ type Forwarder struct {
 	beehiveGeneveAddress netip.AddrPort // (temporary) WireGuard Geneve address of the beehive
 }
 
-func NewForwarder(bind netip.Addr) (*Forwarder, error) {
-	wireguardAddress := netip.MustParseAddr("10.255.2.1")
-	beehiveGeneveAddress := netip.AddrPortFrom(netip.MustParseAddr("10.255.1.1"), GenevePort)
+func NewForwarder(bind netip.Addr, wireguardAddress netip.Addr) (*Forwarder, error) {
+	beehiveGeneveAddress := netip.AddrPortFrom(netip.MustParseAddr("10.64.0.1"), GenevePort)
 
 	iface, err := interfaceOfAddress(bind)
 	if err != nil {
@@ -128,8 +127,7 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 			continue
 		}
 
-		// TODO: use the WireGuard address of the bee.
-		ipv4.DstIP = net.ParseIP("10.255.2.1")
+		ipv4.DstIP = f.wireguardAddress.AsSlice()
 
 		buffer.Clear()
 		switch ipv4.NextLayerType() {

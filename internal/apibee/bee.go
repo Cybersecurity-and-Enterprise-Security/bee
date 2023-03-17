@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/api"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 const (
@@ -30,6 +31,8 @@ type Bee struct {
 	client              *api.Client
 	ID                  uuid.UUID `json:"id"`
 	AuthenticationToken string    `json:"authentication_token"`
+	WireGuardIP         string    `json:"wireguard_ip"`
+	WireGuardPrivateKey string    `json:"wireguard_private_key"`
 }
 
 func LoadOrRegisterBee(beekeeperBaseURL string) (*Bee, error) {
@@ -109,8 +112,16 @@ func (b *Bee) loadFromFile() error {
 }
 
 func (b *Bee) register(registrationToken string) error {
+	key, err := wgtypes.GeneratePrivateKey()
+	if err != nil {
+		return fmt.Errorf("generating new wireguard private key: %w", err)
+	}
+
 	ctx := context.Background()
-	response, err := b.client.RegisterNewEndpoint(ctx, api.RegisterNewEndpointJSONRequestBody{RegistrationToken: registrationToken})
+	response, err := b.client.RegisterNewEndpoint(ctx, api.RegisterNewEndpointJSONRequestBody{
+		RegistrationToken:  registrationToken,
+		WireguardPublicKey: key.PublicKey().String(),
+	})
 	if err != nil {
 		return fmt.Errorf("registering endpoint on API failed: %w", err)
 	}
@@ -130,6 +141,8 @@ func (b *Bee) register(registrationToken string) error {
 
 	b.ID = registerEndpointResponse.JSON201.Id
 	b.AuthenticationToken = registerEndpointResponse.JSON201.ApiKey
+	b.WireGuardIP = registerEndpointResponse.JSON201.WireguardIP
+	b.WireGuardPrivateKey = key.String()
 
 	authenticationTokenProvider, err := securityprovider.NewSecurityProviderBearerToken(b.AuthenticationToken)
 	if err != nil {

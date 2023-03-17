@@ -59,7 +59,7 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 		return fmt.Errorf("starting bee failed: %w", err)
 	}
 
-	forwarder, err := forward.NewForwarder(bindAddress)
+	forwarder, err := forward.NewForwarder(bindAddress, netip.MustParseAddr(bee.WireGuardIP))
 	if err != nil {
 		return fmt.Errorf("creating new forwarder: %w", err)
 	}
