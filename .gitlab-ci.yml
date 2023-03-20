@@ -1,19 +1,33 @@
 default:
-  image: golang:latest
+  image: $CI_REGISTRY_IMAGE/builder:latest
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
+  DOCKER_TLS_CERTDIR: ""
+  BUILDER_IMAGE_NAME: $CI_REGISTRY_IMAGE/builder:latest
 
 stages:
   - build
   - lint
   - test
 
+build-builder-image:
+  stage: build
+  image: docker:latest
+  needs: []
+  services:
+    - name: docker:dind
+      alias: docker
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $BUILDER_IMAGE_NAME -f builder/Dockerfile builder/
+    - docker push $BUILDER_IMAGE_NAME
+  when: manual
+
 compile:
   stage: build
   needs: []
-  variables:
-    CGO_ENABLED: 0
   script:
     - make build
   artifacts:
@@ -24,7 +38,6 @@ compile:
 golangci-lint:
   stage: lint
   needs: []
-  image: golangci/golangci-lint:latest
   script:
     - make lint
 
