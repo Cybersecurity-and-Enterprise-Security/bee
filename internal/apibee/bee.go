@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/deepmap/oapi-codegen/pkg/securityprovider"
 	"github.com/google/uuid"
@@ -16,9 +15,8 @@ import (
 )
 
 const (
-	beeStoreFileName  = "bee.store"
-	beeStoreFileMode  = 0600
-	heartbeatInterval = 1 * time.Minute
+	beeStoreFileName = "bee.store"
+	beeStoreFileMode = 0600
 )
 
 var ErrBeeConfigNotFound = errors.New("bee config not found")
@@ -33,6 +31,7 @@ type Bee struct {
 	AuthenticationToken string    `json:"authentication_token"`
 	WireGuardIP         string    `json:"wireguard_ip"`
 	WireGuardPrivateKey string    `json:"wireguard_private_key"`
+	BeehiveIPRange      string    `json:"beehive_iprange"`
 }
 
 func LoadOrRegisterBee(beekeeperBaseURL string) (*Bee, error) {
@@ -143,6 +142,7 @@ func (b *Bee) register(registrationToken string) error {
 	b.AuthenticationToken = registerEndpointResponse.JSON201.ApiKey
 	b.WireGuardIP = registerEndpointResponse.JSON201.WireguardIP
 	b.WireGuardPrivateKey = key.String()
+	b.BeehiveIPRange = registerEndpointResponse.JSON201.BeehiveIPRange
 
 	authenticationTokenProvider, err := securityprovider.NewSecurityProviderBearerToken(b.AuthenticationToken)
 	if err != nil {
@@ -154,8 +154,7 @@ func (b *Bee) register(registrationToken string) error {
 	return nil
 }
 
-func (b *Bee) ReportStats() error {
-	ctx := context.Background()
+func (b *Bee) ReportStats(ctx context.Context) error {
 	response, err := b.client.AddEndpointStats(ctx, b.ID, api.AddEndpointStatsJSONRequestBody{})
 	if err != nil {
 		return fmt.Errorf("reporting stats to beekeeper: %w", err)
@@ -171,6 +170,21 @@ func (b *Bee) ReportStats() error {
 	}
 
 	return nil
+}
+
+func (b *Bee) GetForwardingInformation(ctx context.Context) (*api.EndpointForwardingInformation, error) {
+	response, err := b.client.GetEndpointForwardingInformation(ctx, b.ID)
+	if err != nil {
+		return nil, fmt.Errorf("getting forwarding information: %w", err)
+	}
+	parsedResponse, err := api.ParseGetEndpointForwardingInformationResponse(response)
+	if err != nil {
+		return nil, fmt.Errorf("parsing endpoint forwarding information response: %w", err)
+	}
+	if parsedResponse.StatusCode() != 200 || parsedResponse.JSON200 == nil {
+		return nil, fmt.Errorf("received %d from API: %s", parsedResponse.StatusCode(), parsedResponse.Body)
+	}
+	return parsedResponse.JSON200, nil
 }
 
 func (b *Bee) Name() (string, error) {
@@ -190,19 +204,4 @@ func (b *Bee) Name() (string, error) {
 	}
 
 	return findEndpointResponse.JSON200.Name, nil
-}
-
-// Heartbeat periodically reports stats to the beehive until ctx is cancelled.
-func (b *Bee) Heartbeat(ctx context.Context) error {
-	for {
-		if err := b.ReportStats(); err != nil {
-			log.WithError(err).Warn("Error during heartbeat")
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(heartbeatInterval):
-		}
-	}
 }

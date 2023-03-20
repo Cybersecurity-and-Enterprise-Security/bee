@@ -11,6 +11,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/apibee"
+	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/heartbeat"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/forward"
 )
 
@@ -59,10 +60,13 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 		return fmt.Errorf("starting bee failed: %w", err)
 	}
 
-	forwarder, err := forward.NewForwarder(bindAddress, netip.MustParseAddr(bee.WireGuardIP))
+	forwarder, err := forward.NewForwarder(bindAddress, bee.WireGuardIP, bee.WireGuardPrivateKey, bee.BeehiveIPRange)
 	if err != nil {
 		return fmt.Errorf("creating new forwarder: %w", err)
 	}
+	defer forwarder.Close()
+
+	heartbeat := heartbeat.NewHeartbeat(bee, forwarder)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -83,7 +87,7 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	}()
 
 	go func() {
-		if err := bee.Heartbeat(ctx); err != nil {
+		if err := heartbeat.Run(ctx); err != nil {
 			errorChannel <- err
 		}
 	}()

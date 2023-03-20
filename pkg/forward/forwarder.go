@@ -11,6 +11,9 @@ import (
 	"github.com/google/gopacket/ip4defrag"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
 const GenevePort = 6081
@@ -20,69 +23,54 @@ type Forwarder struct {
 	attackerCapture  *pcap.Handle // Handle to capture packets from the attacker
 	attackerInjectFd int          // File descriptor of the socket for sending packets to the attacker
 	beehiveConn      *net.UDPConn // Geneve connection to the beehive
-	wireguardAddress netip.Addr   // WireGuard address of the bee
 	listenAddress    netip.Addr   // address on which the bee listens for packets from the attacker
+
+	iface *net.Interface // Interface which we listen on
 
 	defragger *ip4defrag.IPv4Defragmenter // Defragmentation for IPv4 packets.
 
-	beehiveGeneveAddress netip.AddrPort // (temporary) WireGuard Geneve address of the beehive
+	wireguardAddress    net.IPNet    // WireGuard address of the bee
+	wireguardPrivateKey wgtypes.Key  // the private WireGuard key of this Beehive
+	wireguard           netlink.Link // wireguard interface
+
+	beehiveIPRange *net.IPNet // The IP range of the Bees in the WireGuard network.
+
+	link    *netlink.Wireguard
+	netns   *netlink.Handle // handle for the network namespace
+	netnsFd *netns.NsHandle // file descriptor for the network namespace
+
+	rules *ForwardingRuleStore // store for the forwarding rules
 }
 
-func NewForwarder(bind netip.Addr, wireguardAddress netip.Addr) (*Forwarder, error) {
-	beehiveGeneveAddress := netip.AddrPortFrom(netip.MustParseAddr("10.64.0.1"), GenevePort)
-
-	iface, err := interfaceOfAddress(bind)
-	if err != nil {
-		return nil, fmt.Errorf("get interface with address: %w", err)
+func NewForwarder(bind netip.Addr, wireguardAddress, wireguardPrivateKey, beehiveIPRange string) (*Forwarder, error) {
+	forwarder := Forwarder{
+		defragger:     ip4defrag.NewIPv4Defragmenter(),
+		listenAddress: bind,
+		rules:         NewForwardingRuleStore(),
 	}
 
-	handle, err := pcap.NewInactiveHandle(iface.Name)
-	if err != nil {
-		return nil, fmt.Errorf("create inactive handle: %w", err)
-	}
-	if err := handle.SetImmediateMode(true); err != nil {
-		return nil, fmt.Errorf("set immediate mode: %w", err)
-	}
-	if err := handle.SetTimeout(pcap.BlockForever); err != nil {
-		return nil, fmt.Errorf("set timeout: %w", err)
-	}
-	if err := handle.SetSnapLen(1600); err != nil {
-		return nil, fmt.Errorf("set snap length: %w", err)
+	if err := forwarder.setupNetNS(); err != nil {
+		return nil, fmt.Errorf("setting up netns: %w", err)
 	}
 
-	attackerCapture, err := handle.Activate()
-	if err != nil {
-		return nil, fmt.Errorf("activate handle: %w", err)
-	}
-	if err := attackerCapture.SetBPFFilter(fmt.Sprintf("host %s", bind)); err != nil {
-		return nil, fmt.Errorf("set BPF filter: %w", err)
-	}
-	if err := attackerCapture.SetDirection(pcap.DirectionIn); err != nil {
-		return nil, fmt.Errorf("set direction: %w", err)
+	if err := forwarder.setupWireguard(wireguardPrivateKey, wireguardAddress, beehiveIPRange); err != nil {
+		return nil, fmt.Errorf("setting up wireguard: %w", err)
 	}
 
-	beehiveConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: wireguardAddress.AsSlice(), Port: GenevePort})
-	if err != nil {
-		return nil, fmt.Errorf("connect to beehive: %w", err)
+	if err := forwarder.setupAttackerCapture(bind); err != nil {
+		return nil, fmt.Errorf("setting up attacker capture: %w", err)
 	}
 
-	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_RAW)
-	if err != nil {
-		return nil, fmt.Errorf("create raw socket: %w", err)
-	}
-	if err := syscall.SetsockoptString(fd, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, iface.Name); err != nil {
-		return nil, fmt.Errorf("bind raw socket: %w", err)
+	// Create the connection after we setup WireGuard, because otherwise we can't listen on the Geneve port at the WireGuard IP
+	if err := forwarder.setupBeehiveConnection(); err != nil {
+		return nil, fmt.Errorf("setting up beehive connection: %w", err)
 	}
 
-	return &Forwarder{
-		attackerCapture:      attackerCapture,
-		attackerInjectFd:     fd,
-		beehiveConn:          beehiveConn,
-		defragger:            ip4defrag.NewIPv4Defragmenter(),
-		listenAddress:        bind,
-		wireguardAddress:     wireguardAddress,
-		beehiveGeneveAddress: beehiveGeneveAddress,
-	}, nil
+	if err := forwarder.setupAttackerInject(); err != nil {
+		return nil, fmt.Errorf("setting up attacker inject: %w", err)
+	}
+
+	return &forwarder, nil
 }
 
 func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
@@ -127,7 +115,10 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 			continue
 		}
 
-		ipv4.DstIP = f.wireguardAddress.AsSlice()
+		ipv4.DstIP = f.wireguardAddress.IP
+
+		var protocol ForwardingProtocol
+		var port int
 
 		buffer.Clear()
 		switch ipv4.NextLayerType() {
@@ -139,6 +130,8 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 			udp.SetNetworkLayerForChecksum(ipv4)
 			gopacket.Payload(udp.Payload).SerializeTo(buffer, opts)
 			udp.SerializeTo(buffer, opts)
+			protocol = ForwardingProtocolUDP
+			port = int(udp.DstPort)
 		case layers.LayerTypeTCP:
 			tcpParser.DecodeLayers(ipv4.Payload, &decoded)
 			if decoded[0] != layers.LayerTypeTCP {
@@ -147,10 +140,13 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 			tcp.SetNetworkLayerForChecksum(ipv4)
 			gopacket.Payload(tcp.Payload).SerializeTo(buffer, opts)
 			tcp.SerializeTo(buffer, opts)
+			protocol = ForwardingProtocolTCP
+			port = int(tcp.DstPort)
 		default:
 			if err := gopacket.Payload(ipv4.Payload).SerializeTo(buffer, opts); err != nil {
 				return fmt.Errorf("serialize ip payload: %w", err)
 			}
+			protocol = ForwardingProtocolUnknown
 		}
 
 		if err := ipv4.SerializeTo(buffer, opts); err != nil {
@@ -161,8 +157,12 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 			return fmt.Errorf("serialize geneve: %w", err)
 		}
 
-		// TODO: perform beehive address lookup by (destination address, ip protocol, port?)
-		if _, err := f.beehiveConn.WriteToUDP(buffer.Bytes(), net.UDPAddrFromAddrPort(f.beehiveGeneveAddress)); err != nil {
+		destinationBeehive, err := f.rules.GetDestinationBeehive(protocol, port)
+		if err != nil {
+			return fmt.Errorf("getting destination beehive: %w", err)
+		}
+
+		if _, err := f.beehiveConn.WriteToUDP(buffer.Bytes(), net.UDPAddrFromAddrPort(*destinationBeehive)); err != nil {
 			return fmt.Errorf("send packet to beehive: %w", err)
 		}
 	}
@@ -243,4 +243,12 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 			return fmt.Errorf("send packet to attacker: %w", err)
 		}
 	}
+}
+
+func (f *Forwarder) UpdateForwardingRules(newRules []ForwardingRule) {
+	f.rules.UpdateForwardingRules(newRules)
+}
+
+func (f *Forwarder) SetDefaultBeehiveAddress(addr string) {
+	f.rules.SetDefaultBeehiveAddress(addr)
 }
