@@ -120,26 +120,46 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 		var protocol ForwardingProtocol
 		var port int
 
-		buffer.Clear()
+		if err := buffer.Clear(); err != nil {
+			// At least currently, this error can't occur due do the way the buffer is implemented.
+			// However, if that should occur at some point, just create a new buffer instead of clearing the old one.
+			buffer = gopacket.NewSerializeBuffer()
+		}
 		switch ipv4.NextLayerType() {
 		case layers.LayerTypeUDP:
-			udpParser.DecodeLayers(ipv4.Payload, &decoded)
-			if decoded[0] != layers.LayerTypeUDP {
-				return fmt.Errorf("decode udp: wrong layer type %s", decoded)
+			if err := udpParser.DecodeLayers(ipv4.Payload, &decoded); err != nil {
+				return fmt.Errorf("udp decoding layers: %w", err)
 			}
-			udp.SetNetworkLayerForChecksum(ipv4)
-			gopacket.Payload(udp.Payload).SerializeTo(buffer, opts)
-			udp.SerializeTo(buffer, opts)
+			if decoded[0] != layers.LayerTypeUDP {
+				return fmt.Errorf("udp decoded wrong layer type %s", decoded)
+			}
+			if err := udp.SetNetworkLayerForChecksum(ipv4); err != nil {
+				return fmt.Errorf("udp setting network layer for checksum: %w", err)
+			}
+			if err := gopacket.Payload(udp.Payload).SerializeTo(buffer, opts); err != nil {
+				return fmt.Errorf("udp serializing payload to buffer: %w", err)
+			}
+			if err := udp.SerializeTo(buffer, opts); err != nil {
+				return fmt.Errorf("udp serializing to buffer: %w", err)
+			}
 			protocol = ForwardingProtocolUDP
 			port = int(udp.DstPort)
 		case layers.LayerTypeTCP:
-			tcpParser.DecodeLayers(ipv4.Payload, &decoded)
+			if err := tcpParser.DecodeLayers(ipv4.Payload, &decoded); err != nil {
+				return fmt.Errorf("tcp decoding layers: %w", err)
+			}
 			if decoded[0] != layers.LayerTypeTCP {
 				return fmt.Errorf("decode tcp: wrong layer type %s", decoded)
 			}
-			tcp.SetNetworkLayerForChecksum(ipv4)
-			gopacket.Payload(tcp.Payload).SerializeTo(buffer, opts)
-			tcp.SerializeTo(buffer, opts)
+			if err := tcp.SetNetworkLayerForChecksum(ipv4); err != nil {
+				return fmt.Errorf("tcp setting network layer for checksum: %w", err)
+			}
+			if err := gopacket.Payload(tcp.Payload).SerializeTo(buffer, opts); err != nil {
+				return fmt.Errorf("tcp serializing payload to buffer: %w", err)
+			}
+			if err := tcp.SerializeTo(buffer, opts); err != nil {
+				return fmt.Errorf("tcp serializing to buffer: %w", err)
+			}
 			protocol = ForwardingProtocolTCP
 			port = int(tcp.DstPort)
 		default:
@@ -194,7 +214,9 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 			return fmt.Errorf("receive packet: %w", err)
 		}
 
-		parser.DecodeLayers(buffer[:n], &decoded)
+		if err := parser.DecodeLayers(buffer[:n], &decoded); err != nil {
+			return fmt.Errorf("decoding layers: %w", err)
+		}
 
 		if len(decoded) < 2 || decoded[0] != layers.LayerTypeGeneve || decoded[1] != layers.LayerTypeIPv4 {
 			fmt.Printf("packet has wrong structure: %s\n", decoded)
@@ -203,11 +225,17 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 
 		ipv4.SrcIP = f.listenAddress.AsSlice()
 
-		packetBuffer.Clear()
+		if err := packetBuffer.Clear(); err != nil {
+			// At least currently, this error can't occur due do the way the buffer is implemented.
+			// However, if that should occur at some point, just create a new buffer instead of clearing the old one.
+			packetBuffer = gopacket.NewSerializeBuffer()
+		}
 		if len(decoded) >= 3 {
 			switch decoded[2] {
 			case layers.LayerTypeUDP:
-				udp.SetNetworkLayerForChecksum(&ipv4)
+				if err := udp.SetNetworkLayerForChecksum(&ipv4); err != nil {
+					return fmt.Errorf("udp setting network layer for checksum: %w", err)
+				}
 				if err := gopacket.Payload(udp.Payload).SerializeTo(packetBuffer, opts); err != nil {
 					return fmt.Errorf("serialize udp payload: %w", err)
 				}
@@ -215,7 +243,9 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 					return fmt.Errorf("serialize udp: %w", err)
 				}
 			case layers.LayerTypeTCP:
-				tcp.SetNetworkLayerForChecksum(&ipv4)
+				if err := tcp.SetNetworkLayerForChecksum(&ipv4); err != nil {
+					return fmt.Errorf("tcp setting network layer for checksum: %w", err)
+				}
 				if err := gopacket.Payload(tcp.Payload).SerializeTo(packetBuffer, opts); err != nil {
 					return fmt.Errorf("serialize tcp payload: %w", err)
 				}

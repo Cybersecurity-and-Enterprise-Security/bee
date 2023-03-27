@@ -8,12 +8,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/apibee"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/heartbeat"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/forward"
 )
+
+const loopRestartInterval = 1 * time.Second
 
 func init() {
 	log.SetLevel(log.DebugLevel)
@@ -70,33 +73,38 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	errorChannel := make(chan error, 1)
+
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		if err := forwarder.AttackerToBeehiveLoop(ctx); err != nil {
-			errorChannel <- err
+		for {
+			if err := forwarder.AttackerToBeehiveLoop(ctx); err != nil {
+				log.WithError(err).Error("Attacker to Beehive loop failed. Restarting.")
+				<-time.After(loopRestartInterval)
+			}
 		}
 	}()
 
 	go func() {
-		if err := forwarder.BeehiveToAttackerLoop(ctx); err != nil {
-			errorChannel <- err
+		for {
+			if err := forwarder.BeehiveToAttackerLoop(ctx); err != nil {
+				log.WithError(err).Error("Beehive to Attacker loop failed. Restarting.")
+				<-time.After(loopRestartInterval)
+			}
 		}
 	}()
 
 	go func() {
-		if err := heartbeat.Run(ctx); err != nil {
-			errorChannel <- err
+		for {
+			if err := heartbeat.Run(ctx); err != nil {
+				log.WithError(err).Error("Heartbeat failed. Restarting.")
+				<-time.After(loopRestartInterval)
+			}
 		}
 	}()
 
-	select {
-	case <-signalChannel:
-	case err := <-errorChannel:
-		return fmt.Errorf("forward: %w", err)
-	}
+	<-signalChannel
 
 	return nil
 }
