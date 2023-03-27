@@ -4,37 +4,44 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/apibee"
+	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/heartbeat"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/forward"
 )
+
+const loopRestartInterval = 1 * time.Second
 
 func init() {
 	log.SetLevel(log.DebugLevel)
 }
 
 type arguments struct {
-	BindAddress       string
-	BeehiveAddress    string
+	BindAddress       netip.Addr
 	BeekeeperBasePath string
 }
 
 func parseArgs() arguments {
 	var result arguments
-	flag.StringVar(&result.BindAddress, "bind", "", "address to bind listener to")
-	flag.StringVar(&result.BeehiveAddress, "beehive", "127.0.0.1:8335", "address of the beehive")
+	var bindAddress string
+
+	flag.StringVar(&bindAddress, "bind", "", "address to bind listener to")
 	flag.StringVar(&result.BeekeeperBasePath, "beekeeper", "http://127.0.0.1:3001/v1", "base path of the beekeeper")
 	flag.Parse()
 
-	if result.BindAddress == "" {
+	if bindAddress == "" {
 		fmt.Fprintln(os.Stderr, "You need to specify a bind address using -bind.")
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	result.BindAddress = netip.MustParseAddr(bindAddress)
 	return result
 }
 
@@ -43,47 +50,61 @@ func main() {
 
 	log.Info("Starting...")
 
-	err := run(args.BindAddress, args.BeehiveAddress, args.BeekeeperBasePath)
+	err := run(args.BindAddress, args.BeekeeperBasePath)
 	if err != nil {
 		log.WithError(err).Fatal("failed to run")
 	}
 	log.Info("Quitting...")
 }
 
-func run(bindAddress string, beehiveAddress string, beekeeperBasePath string) error {
+func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	bee, err := startBee(beekeeperBasePath)
 	if err != nil {
 		return fmt.Errorf("starting bee failed: %w", err)
 	}
 
-	forwarder, err := forward.NewForwarder(bindAddress, beehiveAddress)
+	forwarder, err := forward.NewForwarder(bindAddress, bee.WireGuardIP, bee.WireGuardPrivateKey, bee.BeehiveIPRange)
 	if err != nil {
 		return fmt.Errorf("creating new forwarder: %w", err)
 	}
+	defer forwarder.Close()
+
+	heartbeat := heartbeat.NewHeartbeat(bee, forwarder)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	errorChannel := make(chan error, 1)
+
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		if err := forwarder.Forward(ctx); err != nil {
-			errorChannel <- err
+		for {
+			if err := forwarder.AttackerToBeehiveLoop(ctx); err != nil {
+				log.WithError(err).Error("Attacker to Beehive loop failed. Restarting.")
+				<-time.After(loopRestartInterval)
+			}
 		}
 	}()
 
 	go func() {
-		if err := bee.Heartbeat(ctx); err != nil {
-			errorChannel <- err
+		for {
+			if err := forwarder.BeehiveToAttackerLoop(ctx); err != nil {
+				log.WithError(err).Error("Beehive to Attacker loop failed. Restarting.")
+				<-time.After(loopRestartInterval)
+			}
 		}
 	}()
 
-	select {
-	case <-signalChannel:
-	case err := <-errorChannel:
-		return fmt.Errorf("forward: %w", err)
-	}
+	go func() {
+		for {
+			if err := heartbeat.Run(ctx); err != nil {
+				log.WithError(err).Error("Heartbeat failed. Restarting.")
+				<-time.After(loopRestartInterval)
+			}
+		}
+	}()
+
+	<-signalChannel
 
 	return nil
 }
