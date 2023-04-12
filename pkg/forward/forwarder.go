@@ -90,7 +90,10 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 	tcp := layers.TCP{}
 
 	udpParser := gopacket.NewDecodingLayerParser(layers.LayerTypeUDP, &udp)
+	udpParser.IgnoreUnsupported = true
 	tcpParser := gopacket.NewDecodingLayerParser(layers.LayerTypeTCP, &tcp)
+	tcpParser.IgnoreUnsupported = true
+
 	decoded := []gopacket.LayerType{}
 
 	for fragment := range packetSource.Packets() {
@@ -197,6 +200,7 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 	var udp layers.UDP
 	var tcp layers.TCP
 	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeGeneve, &geneve, &ipv4, &udp, &tcp)
+	parser.IgnoreUnsupported = true
 	decoded := []gopacket.LayerType{}
 
 	packetBuffer := gopacket.NewSerializeBuffer()
