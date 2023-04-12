@@ -69,7 +69,7 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	}
 	defer forwarder.Close()
 
-	heartbeat := heartbeat.NewHeartbeat(bee, forwarder)
+	heartbeat := heartbeat.NewHeartbeat(bee, forwarder, bindAddress)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
