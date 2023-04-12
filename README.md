@@ -16,12 +16,15 @@ It can:
 Right now, a Linux system like Ubuntu or Debian is required.
 We might extend the program to Windows and others in the future.
 
-The machine you want to run the Bee on should have two interfaces:
-One for your connection via SSH etc. and one for incoming traffic.
+Because we need to drop the Kernel responses to incoming traffic (to avoid that the Kernel sends RST packets for closed ports), please make sure, that an nftables policy like this is applied.
 
-Moreover, we need to drop the Kernel responses to incoming traffic (to avoid that the Kernel sends RST packets for closed ports).
-Please make sure, that an nftables policy like this is applied.
-Adjust `listen_iface` accordingly.
+For now, we **strongly** suggest that you have two interfaces on your machine:
+One for your connection via SSH etc. and one for incoming traffic.
+If this is not possible for you, the following configuration will work with one interface as well, but you may receive error messages which can be ignored.
+
+**Important**: Adjust `listen_iface` and `ssh_port` accordingly.
+If your system only has one network interface, you may loose access to the server if you don't adjust the `ssh_port` properly!
+Also, make sure that your endpoint configuration in the frontend blocks your SSH port!
 
 ```conf
 #!/usr/sbin/nft -f
@@ -29,6 +32,7 @@ Adjust `listen_iface` accordingly.
 flush ruleset
 
 define listen_iface = ens19
+define ssh_port = 22
 
 table inet filter {
         chain input {
@@ -43,6 +47,9 @@ table inet filter {
         }
 
         chain forwarder_block {
+                ct state {established, related} accept
+                tcp dport $ssh_port accept
+
                 meta l4proto {icmp, tcp, udp} drop
         }
 }
