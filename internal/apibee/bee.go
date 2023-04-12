@@ -117,7 +117,7 @@ func (b *Bee) register(registrationToken string) error {
 	}
 
 	ctx := context.Background()
-	response, err := b.client.RegisterNewEndpoint(ctx, api.RegisterNewEndpointJSONRequestBody{
+	response, err := b.client.RegisterNewEndpoint(ctx, api.RegisterEndpointRequest{
 		RegistrationToken:  registrationToken,
 		WireguardPublicKey: key.PublicKey().String(),
 	})
@@ -154,13 +154,13 @@ func (b *Bee) register(registrationToken string) error {
 	return nil
 }
 
-func (b *Bee) ReportStats(ctx context.Context) error {
-	response, err := b.client.AddEndpointStats(ctx, b.ID, api.AddEndpointStatsJSONRequestBody{})
+func (b *Bee) ReportStatistics(ctx context.Context, bindAddress string) error {
+	response, err := b.client.AddEndpointStatistics(ctx, b.ID, api.EndpointStatistics{Ip: bindAddress})
 	if err != nil {
 		return fmt.Errorf("reporting stats to beekeeper: %w", err)
 	}
 
-	addEndpointStatsResponse, err := api.ParseAddEndpointStatsResponse(response)
+	addEndpointStatsResponse, err := api.ParseAddEndpointStatisticsResponse(response)
 	if err != nil {
 		return fmt.Errorf("parsing stats reporting response: %w", err)
 	}

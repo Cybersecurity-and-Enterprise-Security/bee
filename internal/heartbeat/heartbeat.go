@@ -18,14 +18,16 @@ const (
 )
 
 type Heartbeat struct {
-	bee       *apibee.Bee
-	forwarder *forward.Forwarder
+	bee         *apibee.Bee
+	forwarder   *forward.Forwarder
+	bindAddress netip.Addr
 }
 
-func NewHeartbeat(bee *apibee.Bee, forwarder *forward.Forwarder) *Heartbeat {
+func NewHeartbeat(bee *apibee.Bee, forwarder *forward.Forwarder, bindAddress netip.Addr) *Heartbeat {
 	return &Heartbeat{
 		bee,
 		forwarder,
+		bindAddress,
 	}
 }
 
@@ -43,7 +45,7 @@ func (h *Heartbeat) Run(ctx context.Context) error {
 }
 
 func (h *Heartbeat) ReportStats(ctx context.Context) {
-	if err := h.bee.ReportStats(ctx); err != nil {
+	if err := h.bee.ReportStatistics(ctx, h.bindAddress.String()); err != nil {
 		log.WithError(err).Warn("Error during heartbeat")
 	}
 }
