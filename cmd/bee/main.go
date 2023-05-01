@@ -31,8 +31,13 @@ func parseArgs() arguments {
 	var result arguments
 	var bindAddress string
 
+	if os.Getenv("BEE_MODE") == "development" {
+		flag.StringVar(&result.BeekeeperBasePath, "beekeeper", "http://localhost:3001/v1", "base path of the beekeeper")
+	} else {
+		result.BeekeeperBasePath = "https://beekeeper.thebeelab.net/v1"
+	}
+
 	flag.StringVar(&bindAddress, "bind", "", "address to bind listener to")
-	flag.StringVar(&result.BeekeeperBasePath, "beekeeper", "http://127.0.0.1:3001/v1", "base path of the beekeeper")
 	flag.Parse()
 
 	if bindAddress == "" {
