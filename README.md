@@ -72,7 +72,11 @@ table inet filter {
 
 ## Build
 
-Building the binary requires the libpcap header files, which are part of the `libpcap-dev` package on Debian-based distros.
+1. Building the binary requires the libpcap header files, which are part of the `libpcap-dev` package on Debian-based distros. Adjust the command according to your package manager.
+
+    ```bash
+    sudo apt install libpcap-dev
+    ```
 
 1. Clone the project.
 
