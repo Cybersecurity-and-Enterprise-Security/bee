@@ -7,25 +7,45 @@ UNIT_TESTS = $(shell go list ./... | grep -v /e2e)
 DOCKER_TAG := "$(PROJECT_NAME):latest"
 DOCKER_OPTS := -v $(shell pwd)/configuration.yaml:/configuration.yaml
 
+MIN_GO_MAJOR_VERSION := 1
+MIN_GO_MINOR_VERSION := 19
+
 default: help
 
 .PHONY: all
 all: build
 
+GO_VERSION_VALIDATION_ERR_MSG := ""
+
+check-go-version:
+	@GO_MAJOR_VERSION=$$(go version | awk '{print substr($$3, 3)}' | cut -d. -f1); \
+	GO_MINOR_VERSION=$$(go version | awk '{print substr($$3, 3)}' | cut -d. -f2); \
+	if [ $$GO_MAJOR_VERSION -gt $(MIN_GO_MAJOR_VERSION) ]; then \
+		exit 0 ;\
+	elif [ $$GO_MAJOR_VERSION -lt $(MIN_GO_MAJOR_VERSION) ] || [ $$GO_MINOR_VERSION -lt $(MIN_GO_MINOR_VERSION) ] ; then \
+		echo "ERROR: Go version ${MIN_GO_MAJOR_VERSION}.${MIN_GO_MINOR_VERSION} or higher is required, but found $$(go version)";\
+		exit 1; \
+	fi
+
 .PHONY: deps
-deps: ## Get the dependencies
+deps: check-go-version ## Get the dependencies
 	@go get -v -d ./...
 
 .PHONY: upgrade-deps
-upgrade-deps: ## Upgrade the dependencies
+upgrade-deps: check-go-version ## Upgrade the dependencies
 	@go get -u -v -d ./...
 
 .PHONY: tidy-deps
-tidy-deps: ## Remove unused dependencies
+tidy-deps: check-go-version ## Remove unused dependencies
 	@go mod tidy
 
-generate-deps:
+generate-deps: check-go-version
 	go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
+	@if ! which oapi-codegen > /dev/null 2>&1; then \
+		echo "ERROR: Installed oapi-codegen but it is not in your PATH."; \
+		echo "       Make sure that your Go bin directory is part of your PATH, e.g. using \`export PATH=\$$PATH:~/go/bin\` and then run the command again."; \
+		exit 1; \
+	fi
 
 .PHONY: generate
 generate: generate-deps ## Generate Go code
