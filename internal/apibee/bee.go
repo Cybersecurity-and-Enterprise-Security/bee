@@ -144,13 +144,6 @@ func (b *Bee) register(registrationToken string) error {
 	b.WireGuardPrivateKey = key.String()
 	b.BeehiveIPRange = registerEndpointResponse.JSON201.BeehiveIPRange
 
-	authenticationTokenProvider, err := securityprovider.NewSecurityProviderBearerToken(b.AuthenticationToken)
-	if err != nil {
-		return fmt.Errorf("creating bearer token security provider failed: %w", err)
-	}
-
-	b.client.RequestEditors = append(b.client.RequestEditors, authenticationTokenProvider.Intercept)
-
 	return nil
 }
 
@@ -165,7 +158,9 @@ func (b *Bee) ReportStatistics(ctx context.Context, bindAddress string) error {
 		return fmt.Errorf("parsing stats reporting response: %w", err)
 	}
 
-	if addEndpointStatsResponse.StatusCode() != 204 {
+	// We ignore the 429 here because this may happen if the bee is restarted frequently. To not confuse users,
+	// we ignore the error here and don't propagate.
+	if addEndpointStatsResponse.StatusCode() != 204 && addEndpointStatsResponse.StatusCode() != 429 {
 		return fmt.Errorf("received %d from API: %s", addEndpointStatsResponse.StatusCode(), addEndpointStatsResponse.Body)
 	}
 

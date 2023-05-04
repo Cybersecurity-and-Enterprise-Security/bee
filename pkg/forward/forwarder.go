@@ -215,6 +215,11 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 		}
 		n, err := f.beehiveConn.Read(buffer)
 		if err != nil {
+			// The read call terminates with "use of closed network connection" if we stop the program
+			// because of a signal. Hence, we simply ignore any errors if the context has been canceled.
+			if ctx.Err() != nil {
+				return nil
+			}
 			return fmt.Errorf("receive packet: %w", err)
 		}
 
