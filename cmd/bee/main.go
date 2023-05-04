@@ -86,7 +86,11 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 		for {
 			if err := forwarder.AttackerToBeehiveLoop(ctx); err != nil {
 				log.WithError(err).Error("Attacker to Beehive loop failed. Restarting.")
-				<-time.After(loopRestartInterval)
+			}
+			select {
+			case <-time.After(loopRestartInterval):
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
@@ -95,7 +99,11 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 		for {
 			if err := forwarder.BeehiveToAttackerLoop(ctx); err != nil {
 				log.WithError(err).Error("Beehive to Attacker loop failed. Restarting.")
-				<-time.After(loopRestartInterval)
+			}
+			select {
+			case <-time.After(loopRestartInterval):
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
@@ -104,12 +112,17 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 		for {
 			if err := heartbeat.Run(ctx); err != nil {
 				log.WithError(err).Error("Heartbeat failed. Restarting.")
-				<-time.After(loopRestartInterval)
+			}
+			select {
+			case <-time.After(loopRestartInterval):
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
 
-	<-signalChannel
+	sig := <-signalChannel
+	log.WithField("signal", sig).Info("Received signal, shutting down")
 
 	return nil
 }
