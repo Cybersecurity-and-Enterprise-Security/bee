@@ -144,13 +144,6 @@ func (b *Bee) register(registrationToken string) error {
 	b.WireGuardPrivateKey = key.String()
 	b.BeehiveIPRange = registerEndpointResponse.JSON201.BeehiveIPRange
 
-	authenticationTokenProvider, err := securityprovider.NewSecurityProviderBearerToken(b.AuthenticationToken)
-	if err != nil {
-		return fmt.Errorf("creating bearer token security provider failed: %w", err)
-	}
-
-	b.client.RequestEditors = append(b.client.RequestEditors, authenticationTokenProvider.Intercept)
-
 	return nil
 }
 
