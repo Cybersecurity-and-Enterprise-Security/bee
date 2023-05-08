@@ -10,6 +10,7 @@ import (
 	"github.com/deepmap/oapi-codegen/pkg/securityprovider"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/version"
 	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/api"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -147,6 +148,24 @@ func (b *Bee) register(registrationToken string) error {
 	return nil
 }
 
+func (b *Bee) Startup(ctx context.Context) error {
+	response, err := b.client.StartEndpoint(ctx, b.ID, api.EndpointStartup{Version: version.VERSION})
+	if err != nil {
+		return fmt.Errorf("reporting startup to beekeeper: %w", err)
+	}
+
+	startEndpointResponse, err := api.ParseStartEndpointResponse(response)
+	if err != nil {
+		return fmt.Errorf("parsing start endpoint response: %w", err)
+	}
+
+	if startEndpointResponse.StatusCode() != 204 {
+		return fmt.Errorf("endpoint startup received %d from API: %s", startEndpointResponse.StatusCode(), startEndpointResponse.Body)
+	}
+
+	return nil
+}
+
 func (b *Bee) ReportStatistics(ctx context.Context, bindAddress string) error {
 	response, err := b.client.AddEndpointStatistics(ctx, b.ID, api.EndpointStatistics{Ip: bindAddress})
 	if err != nil {
@@ -182,8 +201,7 @@ func (b *Bee) GetForwardingInformation(ctx context.Context) (*api.EndpointForwar
 	return parsedResponse.JSON200, nil
 }
 
-func (b *Bee) Name() (string, error) {
-	ctx := context.Background()
+func (b *Bee) Name(ctx context.Context) (string, error) {
 	response, err := b.client.FindEndpoint(ctx, b.ID)
 	if err != nil {
 		return "", fmt.Errorf("getting endpoint failed: %w", err)

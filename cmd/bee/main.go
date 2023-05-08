@@ -63,7 +63,10 @@ func main() {
 }
 
 func run(bindAddress netip.Addr, beekeeperBasePath string) error {
-	bee, err := startBee(beekeeperBasePath)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	bee, err := startBee(ctx, beekeeperBasePath)
 	if err != nil {
 		return fmt.Errorf("starting bee failed: %w", err)
 	}
@@ -75,9 +78,6 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	defer forwarder.Close()
 
 	heartbeat := heartbeat.NewHeartbeat(bee, forwarder, bindAddress)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
@@ -127,13 +127,17 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	return nil
 }
 
-func startBee(beekeeperBasePath string) (*apibee.Bee, error) {
+func startBee(ctx context.Context, beekeeperBasePath string) (*apibee.Bee, error) {
 	bee, err := apibee.LoadOrRegisterBee(beekeeperBasePath)
 	if err != nil {
+		return nil, fmt.Errorf("loading or registering bee: %w", err)
+	}
+
+	if err := bee.Startup(ctx); err != nil {
 		return nil, fmt.Errorf("starting bee: %w", err)
 	}
 
-	name, err := bee.Name()
+	name, err := bee.Name(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("getting bee's name failed: %w", err)
 	}
