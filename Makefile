@@ -55,6 +55,10 @@ generate: generate-deps ## Generate Go code
 build: deps generate ## Build the binary
 	@go build -o $(PROJECT_NAME) -v $(PKG)
 
+.PHONY: build-arm
+build-arm: deps generate ## Build the binary for arm
+	@GOOS=linux GOARCH=arm CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 CGO_LDFLAGS="-L${PCAP_SRC}" go build -o $(PROJECT_NAME) -v $(PKG)
+
 .PHONY: clean
 clean: ## Remove previous build
 	@rm -f $(PROJECT_NAME)
