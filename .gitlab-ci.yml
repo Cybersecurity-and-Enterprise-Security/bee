@@ -6,11 +6,17 @@ variables:
   DOCKER_TLS_CERTDIR: ""
   BUILDER_IMAGE_NAME: $CI_REGISTRY_IMAGE/builder:latest
   BUILDER_IMAGE_ARM_NAME: $CI_REGISTRY_IMAGE/builder_arm:latest
+  IMAGE_NAME_GENERAL: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG
+  IMAGE_TAG_GENERAL: ${IMAGE_NAME_GENERAL}:latest
+  IMAGE_NAME_GENERAL_AMD64: ${IMAGE_NAME_GENERAL}-amd64:latest
+  IMAGE_NAME_GENERAL_ARM: ${IMAGE_NAME_GENERAL}-arm:latest
+  IMAGE_NAME_GENERAL_AARCH64: ${IMAGE_NAME_GENERAL}-aarch64:latest
 
 stages:
   - build
   - lint
   - test
+  - docker
 
 build-builder-image:
   stage: build
@@ -26,16 +32,6 @@ build-builder-image:
     - docker push $BUILDER_IMAGE_NAME
   when: manual
 
-compile-amd64:
-  stage: build
-  needs: []
-  script:
-    - make build
-  artifacts:
-    paths:
-      - bee
-    expire_in: 1 week
-
 build-builder-image-arm:
   stage: build
   image: docker:latest
@@ -50,6 +46,16 @@ build-builder-image-arm:
     - docker push $BUILDER_IMAGE_ARM_NAME
   when: manual
 
+compile-amd64:
+  stage: build
+  needs: []
+  script:
+    - make build
+  artifacts:
+    paths:
+      - bee
+    expire_in: 1 week
+
 compile-arm:
   stage: build
   image: $BUILDER_IMAGE_ARM_NAME
@@ -58,7 +64,18 @@ compile-arm:
     - make build-arm
   artifacts:
     paths:
-      - bee
+      - bee_arm
+    expire_in: 1 week
+
+compile-aarch64:
+  stage: build
+  image: $BUILDER_IMAGE_ARM_NAME
+  needs: []
+  script:
+    - make build-aarch64
+  artifacts:
+    paths:
+      - bee_aarch64
     expire_in: 1 week
 
 golangci-lint:
@@ -77,3 +94,22 @@ test:
       - coverage_unit.html
     expire_in: 1 week
     expose_as: coverageReport
+
+docker:
+  stage: docker
+  image: docker:latest
+  needs:
+    - compile-amd64
+    - compile-arm
+    - compile-aarch64
+  services:
+    - name: docker:dind
+      alias: docker
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build --push --no-cache -t $IMAGE_NAME_GENERAL_AMD64 -f build/Dockerfile .
+    - docker build --push --no-cache -t $IMAGE_NAME_GENERAL_ARM -f build/Dockerfile --build-arg BEE_PATH=./bee_arm --platform linux/arm .
+    - docker build --push --no-cache -t $IMAGE_NAME_GENERAL_AARCH64 -f build/Dockerfile --build-arg BEE_PATH=./bee_aarch64 --platform linux/aarch64 .
+    - docker manifest create $IMAGE_TAG_GENERAL $IMAGE_NAME_GENERAL_AMD64 $IMAGE_NAME_GENERAL_ARM $IMAGE_NAME_GENERAL_AARCH64
+    - docker manifest push $IMAGE_TAG_GENERAL

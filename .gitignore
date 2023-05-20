@@ -1,5 +1,7 @@
 # project binary
 /bee
+/bee_arm
+/bee_aarch64
 
 # go coverage reports
 coverage.cov

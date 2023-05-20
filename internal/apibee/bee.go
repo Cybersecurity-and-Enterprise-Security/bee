@@ -43,12 +43,17 @@ func LoadOrRegisterBee(beekeeperBaseURL string) (*Bee, error) {
 
 	if err := bee.loadFromFile(); err != nil {
 		if errors.Is(err, ErrBeeConfigNotFound) {
-			log.Info("No bee config found")
+			log.Info("No bee config found, registering new bee.")
 
-			var registrationToken string
-			fmt.Println("\nRegistering new bee. Please enter the registration token: ")
-			if _, err := fmt.Scanln(&registrationToken); err != nil {
-				return nil, fmt.Errorf("reading registration token: %w", err)
+			registrationToken := os.Getenv("BEE_REGISTRATION_TOKEN")
+
+			if registrationToken != "" {
+				log.Info("Read registration token from environment.")
+			} else {
+				fmt.Println("Please enter the registration token: ")
+				if _, err := fmt.Scanln(&registrationToken); err != nil {
+					return nil, fmt.Errorf("reading registration token: %w", err)
+				}
 			}
 
 			if err := bee.register(registrationToken); err != nil {
