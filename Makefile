@@ -57,7 +57,11 @@ build: deps generate ## Build the binary
 
 .PHONY: build-arm
 build-arm: deps generate ## Build the binary for arm
-	@GOOS=linux GOARCH=arm CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 CGO_LDFLAGS="-L${PCAP_SRC}" go build -o $(PROJECT_NAME) -v $(PKG)
+	@GOOS=linux GOARCH=arm CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 CGO_LDFLAGS="-L${PCAP_SRC_ARM}" go build -o $(PROJECT_NAME)_arm -v $(PKG)
+
+.PHONY: build-aarch64
+build-aarch64: deps generate ## Build the binary for arm
+	@GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 CGO_LDFLAGS="-L${PCAP_SRC_AARCH64}" go build -o $(PROJECT_NAME)_aarch64 -v $(PKG)
 
 .PHONY: clean
 clean: ## Remove previous build

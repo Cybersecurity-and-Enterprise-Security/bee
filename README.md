@@ -58,13 +58,30 @@ table inet filter {
 ## Usage
 
 1. Make sure the [requirements](#requirements) for running the Bee are met on your system.
-1. [Build](#build) the binary locally (recommended) or [get the latest prebuild binary](https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee/-/jobs/artifacts/main/download?job=compile) from the main branch (note that this is currently specifically build for the latest Debian, so it might not work on your local system).
 1. Create a new endpoint in the Beekeeper using the frontend or API directly.
 1. Copy the registration token.
-1. Start the Bee using the following command. Currently, the binary requires elevated privileges because of the network operations. Replace `beekeeperUrl` with the URL of your Beekeeper, e.g. `http://127.0.0.1:3001/v1` and `ipAddress` with the IP address you want the Bee to listen on. Usually, this will be your public facing IP address.
+
+### Docker (recommended)
+
+1. Make sure that your machine has `docker` and `docker-compose` installed.
+1. Copy the [docker-compose.yaml](./docker-compose.yaml) to your machine.
+1. Adjust the `-bind` argument accordingly to your setup. Usually, this will be the IP of your public-facing interface (the one with the default route).
+1. Set the `BEE_REGISTRATION_TOKEN` environment variable to the value you copied above.
+1. Start the container
 
     ```bash
-    sudo ./bee -beekeeper <beekeeperUrl> -bind <ipAddress>
+    docker compose up -d
+    ```
+
+### Binary
+
+1. Do one of the following to get your binary.
+        - Get the latest prebuild binary for your architecture ([amd64](https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee/-/jobs/artifacts/main/raw/bee?job=compile-amd64) [arm](https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee/-/jobs/artifacts/main/raw/bee?job=compile-arm) [aarch64](https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee/-/jobs/artifacts/main/raw/bee?job=compile-aarch64)) from the main branch (note that this is currently specifically build for the latest Debian, so it might not work on your local system).
+        - [Build](#build) the binary locally.
+1. Currently, the binary requires elevated privileges because of the network operations. Replace `ipAddress` with the IP address you want the Bee to listen on. Usually, this will be your public facing IP address.
+
+    ```bash
+    sudo ./bee -bind <ipAddress>
     ```
 
 1. Finally, you should be asked to input the registration token copied above.

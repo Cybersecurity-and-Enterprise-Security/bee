@@ -1,4 +1,4 @@
-FROM golang:latest
+FROM golang:bullseye
 
 # Install libpcap-dev, required for building the binary
 RUN apt update && \
