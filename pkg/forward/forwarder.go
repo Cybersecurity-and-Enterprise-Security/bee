@@ -11,6 +11,7 @@ import (
 	"github.com/google/gopacket/ip4defrag"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
@@ -131,53 +132,66 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 		switch ipv4.NextLayerType() {
 		case layers.LayerTypeUDP:
 			if err := udpParser.DecodeLayers(ipv4.Payload, &decoded); err != nil {
-				return fmt.Errorf("udp decoding layers: %w", err)
+				log.WithError(err).Warn("udp: decoding layers")
+				continue
 			}
 			if decoded[0] != layers.LayerTypeUDP {
-				return fmt.Errorf("udp decoded wrong layer type %s", decoded)
+				log.Warnf("udp: decoded wrong layer type %s", decoded)
+				continue
 			}
 			if err := udp.SetNetworkLayerForChecksum(ipv4); err != nil {
-				return fmt.Errorf("udp setting network layer for checksum: %w", err)
+				log.WithError(err).Warn("udp: setting network layer for checksum")
+				continue
 			}
 			if err := gopacket.Payload(udp.Payload).SerializeTo(buffer, opts); err != nil {
-				return fmt.Errorf("udp serializing payload to buffer: %w", err)
+				log.WithError(err).Warn("udp: serializing payload to buffer")
+				continue
 			}
 			if err := udp.SerializeTo(buffer, opts); err != nil {
-				return fmt.Errorf("udp serializing to buffer: %w", err)
+				log.WithError(err).Warn("udp: serializing to buffer")
+				continue
 			}
 			protocol = ForwardingProtocolUDP
 			port = int(udp.DstPort)
 		case layers.LayerTypeTCP:
 			if err := tcpParser.DecodeLayers(ipv4.Payload, &decoded); err != nil {
-				return fmt.Errorf("tcp decoding layers: %w", err)
+				log.WithError(err).Warn("tcp: decoding layers")
+				continue
 			}
 			if decoded[0] != layers.LayerTypeTCP {
-				return fmt.Errorf("decode tcp: wrong layer type %s", decoded)
+				log.Warnf("tcp: decoded wrong layer type %s", decoded)
+				continue
 			}
 			if err := tcp.SetNetworkLayerForChecksum(ipv4); err != nil {
-				return fmt.Errorf("tcp setting network layer for checksum: %w", err)
+				log.WithError(err).Warn("tcp: setting network layer for checksum")
+				continue
 			}
 			if err := gopacket.Payload(tcp.Payload).SerializeTo(buffer, opts); err != nil {
-				return fmt.Errorf("tcp serializing payload to buffer: %w", err)
+				log.WithError(err).Warn("tcp: serializing payload to buffer")
+				continue
 			}
 			if err := tcp.SerializeTo(buffer, opts); err != nil {
-				return fmt.Errorf("tcp serializing to buffer: %w", err)
+				log.WithError(err).Warn("tcp: serializing to buffer")
+				continue
 			}
 			protocol = ForwardingProtocolTCP
 			port = int(tcp.DstPort)
 		default:
 			if err := gopacket.Payload(ipv4.Payload).SerializeTo(buffer, opts); err != nil {
-				return fmt.Errorf("serialize ip payload: %w", err)
+				log.WithError(err).Warn("serialize ip payload")
+				continue
 			}
 			protocol = ForwardingProtocolUnknown
 		}
 
 		if err := ipv4.SerializeTo(buffer, opts); err != nil {
-			return fmt.Errorf("serialize ipv4: %w", err)
+			log.WithError(err).Warn("serialize ipv4: %w", err)
+			continue
 		}
 
 		if err := geneve.SerializeTo(buffer, opts); err != nil {
-			return fmt.Errorf("serialize geneve: %w", err)
+			log.WithError(err).Warn("serialize geneve")
+			continue
 		}
 
 		destinationBeehive, err := f.rules.GetDestinationBeehive(protocol, port)
@@ -224,7 +238,8 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 		}
 
 		if err := parser.DecodeLayers(buffer[:n], &decoded); err != nil {
-			return fmt.Errorf("decoding layers: %w", err)
+			log.WithError(err).Warn("decoding layers")
+			continue
 		}
 
 		if len(decoded) < 2 || decoded[0] != layers.LayerTypeGeneve || decoded[1] != layers.LayerTypeIPv4 {
@@ -243,37 +258,46 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 			switch decoded[2] {
 			case layers.LayerTypeUDP:
 				if err := udp.SetNetworkLayerForChecksum(&ipv4); err != nil {
-					return fmt.Errorf("udp setting network layer for checksum: %w", err)
+					log.WithError(err).Warn("udp: setting network layer for checksum")
+					continue
 				}
 				if err := gopacket.Payload(udp.Payload).SerializeTo(packetBuffer, opts); err != nil {
-					return fmt.Errorf("serialize udp payload: %w", err)
+					log.WithError(err).Warn("udp: serialize payload")
+					continue
 				}
 				if err := udp.SerializeTo(packetBuffer, opts); err != nil {
-					return fmt.Errorf("serialize udp: %w", err)
+					log.WithError(err).Warn("udp: serialize")
+					continue
 				}
 			case layers.LayerTypeTCP:
 				if err := tcp.SetNetworkLayerForChecksum(&ipv4); err != nil {
-					return fmt.Errorf("tcp setting network layer for checksum: %w", err)
+					log.WithError(err).Warn("tcp: setting network layer for checksum")
+					continue
 				}
 				if err := gopacket.Payload(tcp.Payload).SerializeTo(packetBuffer, opts); err != nil {
-					return fmt.Errorf("serialize tcp payload: %w", err)
+					log.WithError(err).Warn("tcp: serialize payload")
+					continue
 				}
 				if err := tcp.SerializeTo(packetBuffer, opts); err != nil {
-					return fmt.Errorf("serialize tcp: %w", err)
+					log.WithError(err).Warn("tcp: serialize")
+					continue
 				}
 			default:
 				if err := gopacket.Payload(ipv4.Payload).SerializeTo(packetBuffer, opts); err != nil {
-					return fmt.Errorf("serialize ip payload: %w", err)
+					log.WithError(err).Warn("serialize ip payload")
+					continue
 				}
 			}
 		} else {
 			if err := gopacket.Payload(ipv4.Payload).SerializeTo(packetBuffer, opts); err != nil {
-				return fmt.Errorf("serialize ip payload: %w", err)
+				log.WithError(err).Warn("serialize ip payload")
+				continue
 			}
 		}
 
 		if err := ipv4.SerializeTo(packetBuffer, opts); err != nil {
-			return fmt.Errorf("serialize ipv4: %w", err)
+			log.WithError(err).Warn("serialize ipv4")
+			continue
 		}
 
 		var sockAddr syscall.SockaddrInet4
