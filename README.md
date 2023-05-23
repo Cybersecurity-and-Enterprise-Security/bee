@@ -1,5 +1,8 @@
 # 🐝 bee 🐝
 
+[![Run Tests](https://github.com/Cybersecurity-and-Enterprise-Security/bee/actions/workflows/test.yaml/badge.svg)](https://github.com/Cybersecurity-and-Enterprise-Security/bee/actions/workflows/test.yaml)
+[![Docker](https://github.com/Cybersecurity-and-Enterprise-Security/bee/actions/workflows/docker.yaml/badge.svg)](https://github.com/Cybersecurity-and-Enterprise-Security/bee/actions/workflows/docker.yaml)
+
 The bee is the public facing endpoint in the Alvarium honeypot project.
 
 It can:

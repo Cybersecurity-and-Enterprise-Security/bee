@@ -2,7 +2,7 @@ version: '3'
 
 services:
   bee:
-    image: registry.gitlab.cyber-threat-intelligence.com/software/alvarium/bee/main:latest
+    image: ghcr.io/cybersecurity-and-enterprise-security/bee:main
     restart: always
     command: -bind ...
     network_mode: host
