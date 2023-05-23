@@ -1,16 +1,15 @@
 default:
-  image: $CI_REGISTRY_IMAGE/builder:latest
+  image: $BUILDER_IMAGE_AMD64
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
   DOCKER_TLS_CERTDIR: ""
-  BUILDER_IMAGE_NAME: $CI_REGISTRY_IMAGE/builder:latest
-  BUILDER_IMAGE_ARM_NAME: $CI_REGISTRY_IMAGE/builder_arm:latest
-  IMAGE_NAME_GENERAL: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG
-  IMAGE_TAG_GENERAL: ${IMAGE_NAME_GENERAL}:latest
-  IMAGE_NAME_GENERAL_AMD64: ${IMAGE_NAME_GENERAL}-amd64:latest
-  IMAGE_NAME_GENERAL_ARM: ${IMAGE_NAME_GENERAL}-arm:latest
-  IMAGE_NAME_GENERAL_AARCH64: ${IMAGE_NAME_GENERAL}-aarch64:latest
+  BUILDER_IMAGE_GENERAL: ${CI_REGISTRY_IMAGE}/builder
+  BUILDER_IMAGE_AMD64: ${BUILDER_IMAGE_GENERAL}-amd64:latest
+  BUILDER_IMAGE_ARM64: ${BUILDER_IMAGE_GENERAL}-arm64:latest
+  BUILDER_IMAGE_ARMV6: ${BUILDER_IMAGE_GENERAL}-armv6:latest
+  BUILDER_IMAGE_ARMV7: ${BUILDER_IMAGE_GENERAL}-armv7:latest
+  IMAGE_NAME: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:latest
 
 stages:
   - build
@@ -28,25 +27,17 @@ build-builder-image:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    - docker build -t $BUILDER_IMAGE_NAME -f builder/Dockerfile builder/
-    - docker push $BUILDER_IMAGE_NAME
+    - docker build -t $BUILDER_IMAGE_AMD64 -f builder/Dockerfile.amd64 builder/
+    - docker build -t $BUILDER_IMAGE_ARM64 -f builder/Dockerfile.arm64 builder/
+    - docker build -t $BUILDER_IMAGE_ARMV6 -f builder/Dockerfile.armv6 builder/
+    - docker build -t $BUILDER_IMAGE_ARMV7 -f builder/Dockerfile.armv7 builder/
+    - docker push $BUILDER_IMAGE_AMD64 
+    - docker push $BUILDER_IMAGE_ARM64
+    - docker push $BUILDER_IMAGE_ARMV6
+    - docker push $BUILDER_IMAGE_ARMV7
   when: manual
 
-build-builder-image-arm:
-  stage: build
-  image: docker:latest
-  needs: []
-  services:
-    - name: docker:dind
-      alias: docker
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  script:
-    - docker build -t $BUILDER_IMAGE_ARM_NAME -f builder_arm/Dockerfile builder_arm/
-    - docker push $BUILDER_IMAGE_ARM_NAME
-  when: manual
-
-compile-amd64:
+compile:
   stage: build
   needs: []
   script:
@@ -54,28 +45,6 @@ compile-amd64:
   artifacts:
     paths:
       - bee
-    expire_in: 1 week
-
-compile-arm:
-  stage: build
-  image: $BUILDER_IMAGE_ARM_NAME
-  needs: []
-  script:
-    - make build-arm
-  artifacts:
-    paths:
-      - bee_arm
-    expire_in: 1 week
-
-compile-aarch64:
-  stage: build
-  image: $BUILDER_IMAGE_ARM_NAME
-  needs: []
-  script:
-    - make build-aarch64
-  artifacts:
-    paths:
-      - bee_aarch64
     expire_in: 1 week
 
 golangci-lint:
@@ -95,21 +64,54 @@ test:
     expire_in: 1 week
     expose_as: coverageReport
 
-docker:
+.docker-template: &docker-template
   stage: docker
   image: docker:latest
   needs:
-    - compile-amd64
-    - compile-arm
-    - compile-aarch64
+    - compile
+    - golangci-lint
+    - test
   services:
     - name: docker:dind
       alias: docker
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker buildx create --use
   script:
-    - docker build --push --no-cache -t $IMAGE_NAME_GENERAL_AMD64 -f build/Dockerfile .
-    - docker build --push --no-cache -t $IMAGE_NAME_GENERAL_ARM -f build/Dockerfile --build-arg BEE_PATH=./bee_arm --platform linux/arm .
-    - docker build --push --no-cache -t $IMAGE_NAME_GENERAL_AARCH64 -f build/Dockerfile --build-arg BEE_PATH=./bee_aarch64 --platform linux/aarch64 .
-    - docker manifest create $IMAGE_TAG_GENERAL $IMAGE_NAME_GENERAL_AMD64 $IMAGE_NAME_GENERAL_ARM $IMAGE_NAME_GENERAL_AARCH64
-    - docker manifest push $IMAGE_TAG_GENERAL
+    # Build images
+    - docker buildx build
+      -t $IMAGE_NAME
+      --build-arg BUILDER=$BUILDER_IMAGE_GENERAL
+      --platform "$DOCKER_PLATFORM"
+      -f ./build/Dockerfile
+      --push .
+    # Extract binaries for release
+    - docker buildx build
+      -t $IMAGE_NAME
+      --build-arg BUILDER=$BUILDER_IMAGE_GENERAL
+      --platform "$DOCKER_PLATFORM"
+      -f ./build/Dockerfile
+      --target=binary --output bin .
+  artifacts:
+    paths:
+      - bin/
+
+docker-linux-amd64:
+  <<: *docker-template
+  except:
+    - main
+  variables:
+    DOCKER_PLATFORM: "linux/amd64"
+
+docker-branch-all-arch:
+  <<: *docker-template
+  variables:
+    DOCKER_PLATFORM: "linux/arm/v7,linux/arm/v6,linux/arm64,linux/amd64"
+  when: manual
+
+docker-main-all-arch:
+  <<: *docker-template
+  only:
+    - main
+  variables:
+    DOCKER_PLATFORM: "linux/arm/v7,linux/arm/v6,linux/arm64,linux/amd64"

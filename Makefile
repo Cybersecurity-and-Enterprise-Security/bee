@@ -51,17 +51,32 @@ generate-deps: check-go-version
 generate: generate-deps ## Generate Go code
 	go generate ./...
 
+.PHONY: libpcap
+libpcap:  ## Build libpcap
+	cd ${PCAP_SRC} && \
+	if [ "$(ARCH)" = "arm" ]; then 
+		CC=arm-linux-gnueabi-gcc ./configure --host=arm-linux --with-pcap=linux ; \
+	elif [ "$(ARCH)" = "aarch64" ]; then \
+		CC=aarch64-linux-gnu-gcc ./configure --host=aarch64-linux --with-pcap=linux ; \
+	elif [ "$(ARCH)" = "amd64" ]; then \
+		./configure --host=amd64-linux --with-pcap=linux ; \
+	else \
+		echo "Unsupported architecture: $(ARCH)" ; \
+		exit 1 ; \
+	fi; \
+	make && make install
+
 .PHONY: build
 build: deps generate ## Build the binary
-	@go build -o $(PROJECT_NAME) -v $(PKG)
-
-.PHONY: build-arm
-build-arm: deps generate ## Build the binary for arm
-	@GOOS=linux GOARCH=arm CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 CGO_LDFLAGS="-L${PCAP_SRC_ARM}" go build -o $(PROJECT_NAME)_arm -v $(PKG)
-
-.PHONY: build-aarch64
-build-aarch64: deps generate ## Build the binary for arm
-	@GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 CGO_LDFLAGS="-L${PCAP_SRC_AARCH64}" go build -o $(PROJECT_NAME)_aarch64 -v $(PKG)
+	@if [ "$(TARGETARCH)" = "arm" ] && [ "$(TARGETVARIANT)" = "v7" ]; then \
+		GOOS=linux GOARCH=arm CC=arm-linux-gnueabihf-gcc CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/arm-linux-gnueabihf/" go build -o $(PROJECT_NAME) -v $(PKG) ; \
+	elif [ "$(TARGETARCH)" = "arm" ] && [ "$(TARGETVARIANT)" = "v6" ]; then \
+		GOOS=linux GOARCH=arm CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/arm-linux-gnueabi/" go build -o $(PROJECT_NAME) -v $(PKG) ; \
+	elif [ "$(TARGETARCH)" = "arm64" ]; then \
+		GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 CGO_LDFLAGS="-L/usr/lib/aarch64-linux-gnu/" go build -o $(PROJECT_NAME) -v $(PKG) ; \
+	else \
+		go build -o $(PROJECT_NAME) -v $(PKG); \
+	fi;
 
 .PHONY: clean
 clean: ## Remove previous build

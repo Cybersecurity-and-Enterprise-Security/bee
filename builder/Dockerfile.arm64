@@ -1,0 +1,8 @@
+FROM golang:bullseye
+
+# Install dependencies for cross compilation
+RUN dpkg --add-architecture arm64 && \
+    apt update && \
+    apt install -y gcc-aarch64-linux-gnu libpcap-dev:arm64 && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
