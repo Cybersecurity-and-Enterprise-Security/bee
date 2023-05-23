@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/apibee"
+	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/heartbeat"
+	"github.com/Cybersecurity-and-Enterprise-Security/bee/pkg/forward"
 	log "github.com/sirupsen/logrus"
-	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/apibee"
-	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/heartbeat"
-	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/forward"
 )
 
 const loopRestartInterval = 1 * time.Second

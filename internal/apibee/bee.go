@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/version"
+	"github.com/Cybersecurity-and-Enterprise-Security/bee/pkg/api"
 	"github.com/deepmap/oapi-codegen/pkg/securityprovider"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
-	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/version"
-	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/api"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 

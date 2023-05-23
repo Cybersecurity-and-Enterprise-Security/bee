@@ -1,6 +1,6 @@
 # project binary
 /bee
-/bin
+bin/
 
 # go coverage reports
 coverage.cov

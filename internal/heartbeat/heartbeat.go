@@ -6,10 +6,10 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/apibee"
+	"github.com/Cybersecurity-and-Enterprise-Security/bee/pkg/api"
+	"github.com/Cybersecurity-and-Enterprise-Security/bee/pkg/forward"
 	log "github.com/sirupsen/logrus"
-	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/internal/apibee"
-	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/api"
-	"gitlab.cyber-threat-intelligence.com/software/alvarium/bee/pkg/forward"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
