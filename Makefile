@@ -1,11 +1,8 @@
 # Based on https://github.com/openHPI/poseidon/blob/main/Makefile
 
 PROJECT_NAME := "bee"
-PKG := "gitlab.cyber-threat-intelligence.com/software/alvarium/$(PROJECT_NAME)/cmd/$(PROJECT_NAME)"
+PKG := "github.com/Cybersecurity-and-Enterprise-Security/$(PROJECT_NAME)/cmd/$(PROJECT_NAME)"
 UNIT_TESTS = $(shell go list ./... | grep -v /e2e)
-
-DOCKER_TAG := "$(PROJECT_NAME):latest"
-DOCKER_OPTS := -v $(shell pwd)/configuration.yaml:/configuration.yaml
 
 MIN_GO_MAJOR_VERSION := 1
 MIN_GO_MINOR_VERSION := 19
@@ -14,8 +11,6 @@ default: help
 
 .PHONY: all
 all: build
-
-GO_VERSION_VALIDATION_ERR_MSG := ""
 
 check-go-version:
 	@GO_MAJOR_VERSION=$$(go version | awk '{print substr($$3, 3)}' | cut -d. -f1); \

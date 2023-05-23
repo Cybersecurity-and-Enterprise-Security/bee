@@ -1,4 +1,4 @@
-module gitlab.cyber-threat-intelligence.com/software/alvarium/bee
+module github.com/Cybersecurity-and-Enterprise-Security/bee
 
 go 1.19
 

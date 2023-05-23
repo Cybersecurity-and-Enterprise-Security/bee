@@ -1,7 +1,5 @@
 # 🐝 bee 🐝
 
-[![pipeline status](https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee/badges/main/pipeline.svg)](https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee/-/commits/main)
-
 The bee is the public facing endpoint in the Alvarium honeypot project.
 
 It can:
@@ -18,13 +16,11 @@ We might extend the program to Windows and others in the future.
 
 Because we need to drop the Kernel responses to incoming traffic (to avoid that the Kernel sends RST packets for closed ports), please make sure, that an nftables policy like this is applied.
 
-For now, we **strongly** suggest that you have two interfaces on your machine:
-One for your connection via SSH etc. and one for incoming traffic.
-If this is not possible for you, the following configuration will work with one interface as well, but you may receive error messages which can be ignored.
-
 **Important**: Adjust `listen_iface` and `ssh_port` accordingly.
 If your system only has one network interface, you may loose access to the server if you don't adjust the `ssh_port` properly!
+
 Also, make sure that your endpoint configuration in the frontend blocks your SSH port!
+If you registered the device via the stepper in the tarpit, this is done for you already.
 
 ```conf
 #!/usr/sbin/nft -f
@@ -76,9 +72,9 @@ table inet filter {
 ### Binary
 
 1. Do one of the following to get your binary.
-        - Get the latest prebuild binary for your architecture ([amd64](https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee/-/jobs/artifacts/main/raw/bee?job=compile-amd64) [arm](https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee/-/jobs/artifacts/main/raw/bee?job=compile-arm) [aarch64](https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee/-/jobs/artifacts/main/raw/bee?job=compile-aarch64)) from the main branch (note that this is currently specifically build for the latest Debian, so it might not work on your local system).
+        - Get the latest prebuild binary for your architecture from the [releases](https://github.com/Cybersecurity-and-Enterprise-Security/bee/releases) (note that this is currently specifically build for the latest Debian, so it might not work on your local system).
         - [Build](#build) the binary locally.
-1. Currently, the binary requires elevated privileges because of the network operations. Replace `ipAddress` with the IP address you want the Bee to listen on. Usually, this will be your public facing IP address.
+1. Currently, the binary requires elevated privileges because of the network operations. Hence, either run the binary with `sudo`, or set the necessary capabilities using `sudo setcap cap_net_admin,cap_sys_admin,cap_net_raw=eip ./bee`. Replace `ipAddress` with the IP address you want the Bee to listen on. Usually, this will be your public facing IP address.
 
     ```bash
     sudo ./bee -bind <ipAddress>
@@ -98,7 +94,7 @@ table inet filter {
 1. Clone the project.
 
     ```bash
-    git clone --recurse-submodules https://gitlab.cyber-threat-intelligence.com/software/alvarium/bee.git
+    git clone --recurse-submodules git@github.com:Cybersecurity-and-Enterprise-Security/bee.git
     cd bee
     ```
 
