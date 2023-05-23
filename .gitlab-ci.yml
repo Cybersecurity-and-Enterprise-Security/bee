@@ -1,14 +1,10 @@
 default:
-  image: $BUILDER_IMAGE_AMD64
+  image: $BUILDER_IMAGE_GENERAL
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
   DOCKER_TLS_CERTDIR: ""
-  BUILDER_IMAGE_GENERAL: ${CI_REGISTRY_IMAGE}/builder
-  BUILDER_IMAGE_AMD64: ${BUILDER_IMAGE_GENERAL}-amd64:latest
-  BUILDER_IMAGE_ARM64: ${BUILDER_IMAGE_GENERAL}-arm64:latest
-  BUILDER_IMAGE_ARMV6: ${BUILDER_IMAGE_GENERAL}-armv6:latest
-  BUILDER_IMAGE_ARMV7: ${BUILDER_IMAGE_GENERAL}-armv7:latest
+  BUILDER_IMAGE_GENERAL: ${CI_REGISTRY_IMAGE}/builder:latest
   IMAGE_NAME: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_SLUG:latest
 
 stages:
@@ -27,14 +23,7 @@ build-builder-image:
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    - docker build -t $BUILDER_IMAGE_AMD64 -f builder/Dockerfile.amd64 builder/
-    - docker build -t $BUILDER_IMAGE_ARM64 -f builder/Dockerfile.arm64 builder/
-    - docker build -t $BUILDER_IMAGE_ARMV6 -f builder/Dockerfile.armv6 builder/
-    - docker build -t $BUILDER_IMAGE_ARMV7 -f builder/Dockerfile.armv7 builder/
-    - docker push $BUILDER_IMAGE_AMD64 
-    - docker push $BUILDER_IMAGE_ARM64
-    - docker push $BUILDER_IMAGE_ARMV6
-    - docker push $BUILDER_IMAGE_ARMV7
+    - docker build -t $BUILDER_IMAGE_GENERAL -f builder/Dockerfile builder/
   when: manual
 
 compile:
@@ -81,14 +70,12 @@ test:
     # Build images
     - docker buildx build
       -t $IMAGE_NAME
-      --build-arg BUILDER=$BUILDER_IMAGE_GENERAL
       --platform "$DOCKER_PLATFORM"
       -f ./build/Dockerfile
       --push .
     # Extract binaries for release
     - docker buildx build
       -t $IMAGE_NAME
-      --build-arg BUILDER=$BUILDER_IMAGE_GENERAL
       --platform "$DOCKER_PLATFORM"
       -f ./build/Dockerfile
       --target=binary --output bin .

@@ -1,8 +1,0 @@
-FROM golang:bullseye
-
-# Install dependencies for cross compilation
-RUN dpkg --add-architecture armel && \
-    apt update && \
-    apt install -y gcc-arm-linux-gnueabi libpcap-dev:armel && \
-    apt clean && \
-    rm -rf /var/lib/apt/lists/*

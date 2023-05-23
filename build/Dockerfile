@@ -1,8 +1,10 @@
 ARG BUILDER
-FROM --platform=$BUILDPLATFORM ${BUILDER}-${TARGETARCH}${TARGETVARIANT} AS base
+FROM --platform=$BUILDPLATFORM golang:bullseye AS base
 
 ARG TARGETARCH
 ARG TARGETVARIANT
+
+RUN --mount=type=bind,source=build/deps.sh,target=/deps.sh /deps.sh
 
 WORKDIR /workspace
 COPY . .
@@ -14,7 +16,7 @@ COPY --from=base /workspace/bee /
 FROM debian:bullseye-slim as bee
 # Install libpcap-dev, required for running the binary
 RUN apt update && \
-    apt install -y libpcap-dev ca-certificates && \
+    apt install -y libpcap-dev ca-certificates iproute2 wireguard-tools && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
