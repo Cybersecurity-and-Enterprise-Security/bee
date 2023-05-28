@@ -57,8 +57,12 @@ func (h *Heartbeat) UpdateForwardings(ctx context.Context) {
 		return
 	}
 
-	h.forwarder.SetDefaultBeehiveAddress(info.DefaultBeehive)
-	log.WithField("beehive", info.DefaultBeehive).Debug("updated default beehive")
+	err = h.forwarder.SetDefaultBeehiveAddress(info.DefaultBeehive)
+	if err != nil {
+		log.WithError(err).Error("Error updating default beehive address")
+	} else {
+		log.WithField("beehive", info.DefaultBeehive).Debug("Updated default beehive")
+	}
 
 	newBeehives := make([]forward.WireguardBeehive, 0, len(info.Beehives))
 	for _, beehive := range info.Beehives {

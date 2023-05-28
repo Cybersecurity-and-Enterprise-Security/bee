@@ -62,6 +62,13 @@ func main() {
 	log.Info("Quitting...")
 }
 
+func recoverPanic(signalChannel chan os.Signal) {
+	if err := recover(); err != nil {
+		log.WithField("panic", err).Error("panic occurred, shutting down")
+		close(signalChannel)
+	}
+}
+
 func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -82,7 +89,10 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 
+	defer recoverPanic(signalChannel)
+
 	go func() {
+		defer recoverPanic(signalChannel)
 		for {
 			if err := forwarder.AttackerToBeehiveLoop(ctx); err != nil {
 				log.WithError(err).Error("Attacker to Beehive loop failed. Restarting.")
@@ -96,6 +106,7 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	}()
 
 	go func() {
+		defer recoverPanic(signalChannel)
 		for {
 			if err := forwarder.BeehiveToAttackerLoop(ctx); err != nil {
 				log.WithError(err).Error("Beehive to Attacker loop failed. Restarting.")
@@ -109,6 +120,7 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	}()
 
 	go func() {
+		defer recoverPanic(signalChannel)
 		for {
 			if err := heartbeat.Run(ctx); err != nil {
 				log.WithError(err).Error("Heartbeat failed. Restarting.")

@@ -2,6 +2,7 @@ package forward
 
 import (
 	"errors"
+	"fmt"
 	"net/netip"
 	"runtime"
 	"sync"
@@ -40,13 +41,20 @@ func NewForwardingRuleStore() *ForwardingRuleStore {
 	}
 }
 
-func (f *ForwardingRuleStore) SetDefaultBeehiveAddress(addr string) {
+func (f *ForwardingRuleStore) SetDefaultBeehiveAddress(addr string) error {
 	f.Lock()
 	defer f.Unlock()
 
-	addrPort := netip.AddrPortFrom(netip.MustParseAddr(addr), GenevePort)
+	parsed, err := netip.ParseAddr(addr)
+	if err != nil {
+		return fmt.Errorf("parsing default beehive address: %w", err)
+	}
+
+	addrPort := netip.AddrPortFrom(parsed, GenevePort)
 
 	f.defaultBeehive = &addrPort
+
+	return nil
 }
 
 func (f *ForwardingRuleStore) UpdateForwardingRules(newRules []ForwardingRule) {
