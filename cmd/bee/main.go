@@ -17,12 +17,9 @@ import (
 
 const loopRestartInterval = 1 * time.Second
 
-func init() {
-	log.SetLevel(log.DebugLevel)
-}
-
 func main() {
 	args := parseArgs()
+	log.SetLevel(args.LogLevel)
 
 	log.WithField("BindAddress", args.BindAddress).Info("Starting Bee")
 
