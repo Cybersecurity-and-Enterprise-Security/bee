@@ -77,7 +77,7 @@ table inet filter {
 1. Do one of the following to get your binary.
         - Get the latest prebuild binary for your architecture from the [releases](https://github.com/Cybersecurity-and-Enterprise-Security/bee/releases) (note that this is currently specifically build for the latest Debian, so it might not work on your local system).
         - [Build](#build) the binary locally.
-1. Currently, the binary requires elevated privileges because of the network operations. Hence, either run the binary with `sudo`, or set the necessary capabilities using `sudo setcap cap_net_admin,cap_sys_admin,cap_net_raw=eip ./bee`. Replace `ipAddress` with the IP address you want the Bee to listen on. Usually, this will be your public facing IP address.
+1. Currently, the binary requires elevated privileges because of the network operations. Hence, either run the binary with `sudo`, or set the necessary capabilities using `sudo setcap cap_net_admin,cap_net_raw=eip ./bee`. Replace `ipAddress` with the IP address you want the Bee to listen on. Usually, this will be your public facing IP address.
 
     ```bash
     sudo ./bee -bind <ipAddress>
