@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/version"
 	"github.com/Cybersecurity-and-Enterprise-Security/bee/pkg/api"
@@ -78,7 +80,9 @@ func LoadOrRegisterBee(beekeeperBaseURL string) (*Bee, error) {
 }
 
 func NewBee(beekeeperBasePath string) (*Bee, error) {
-	client, err := api.NewClient(beekeeperBasePath)
+	client, err := api.NewClient(beekeeperBasePath, api.WithHTTPClient(
+		&http.Client{Timeout: 15 * time.Second},
+	))
 	if err != nil {
 		return nil, fmt.Errorf("creating API client failed: %w", err)
 	}
