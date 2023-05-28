@@ -75,12 +75,12 @@ table inet filter {
 ### Binary
 
 1. Do one of the following to get your binary.
-        - Get the latest prebuild binary for your architecture from the [releases](https://github.com/Cybersecurity-and-Enterprise-Security/bee/releases) (note that this is currently specifically build for the latest Debian, so it might not work on your local system).
-        - [Build](#build) the binary locally.
-1. Currently, the binary requires elevated privileges because of the network operations. Hence, either run the binary with `sudo`, or set the necessary capabilities using `sudo setcap cap_net_admin,cap_net_raw=eip ./bee`. Replace `ipAddress` with the IP address you want the Bee to listen on. Usually, this will be your public facing IP address.
+    - Get the latest prebuild binary for your architecture from the [releases](https://github.com/Cybersecurity-and-Enterprise-Security/bee/releases) (note that this is currently specifically build for the latest Debian, so it might not work on your local system).
+    - [Build](#build) the binary locally.
+1. Currently, the binary requires elevated privileges because of the network operations. Hence, either run the binary with `sudo`, or set the necessary capabilities using `sudo setcap cap_net_admin,cap_net_raw=eip ./bee`. **Note**: The program choses an IP address to bind to by default [based on your default routes](cmd/bee/args.go). Most of the times, this should be correct. If your host retrieves the external traffic on a separate IP address, adjust it using the `-bind <ipAddress>` flag.
 
     ```bash
-    sudo ./bee -bind <ipAddress>
+    sudo ./bee
     ```
 
 1. Finally, you should be asked to input the registration token copied above.

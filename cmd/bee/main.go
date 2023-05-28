@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net/netip"
 	"os"
@@ -22,38 +21,10 @@ func init() {
 	log.SetLevel(log.DebugLevel)
 }
 
-type arguments struct {
-	BindAddress       netip.Addr
-	BeekeeperBasePath string
-}
-
-func parseArgs() arguments {
-	var result arguments
-	var bindAddress string
-
-	if os.Getenv("BEE_MODE") == "development" {
-		flag.StringVar(&result.BeekeeperBasePath, "beekeeper", "http://localhost:3001/v1", "base path of the beekeeper")
-	} else {
-		result.BeekeeperBasePath = "https://beekeeper.thebeelab.net/v1"
-	}
-
-	flag.StringVar(&bindAddress, "bind", "", "address to bind listener to")
-	flag.Parse()
-
-	if bindAddress == "" {
-		fmt.Fprintln(os.Stderr, "You need to specify a bind address using -bind.")
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	result.BindAddress = netip.MustParseAddr(bindAddress)
-	return result
-}
-
 func main() {
 	args := parseArgs()
 
-	log.Info("Starting...")
+	log.WithField("BindAddress", args.BindAddress).Info("Starting Bee")
 
 	err := run(args.BindAddress, args.BeekeeperBasePath)
 	if err != nil {
