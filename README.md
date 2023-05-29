@@ -17,42 +17,15 @@ It can:
 Right now, a Linux system like Ubuntu or Debian is required.
 We might extend the program to Windows and others in the future.
 
-Because we need to drop the Kernel responses to incoming traffic (to avoid that the Kernel sends RST packets for closed ports), please make sure, that an nftables policy like this is applied.
+Because we need to drop the Kernel responses to incoming traffic (to avoid that the Kernel sends RST packets for closed ports), we apply [an nftables](internal/nftables/bee-nftables.conf) configuration automatically.
+Open ports are excluded from the rules to avoid that running services like SSH are blocked.
 
-**Important**: Adjust `listen_iface` and `ssh_port` accordingly.
-If your system only has one network interface, you may loose access to the server if you don't adjust the `ssh_port` properly!
+**Note**: We currently only support nftables.
+If your system is using legacy iptables (not `iptables-nft`), disable automatic nftables generation using the `-disableNftables` flag.
+Then, please make sure that you apply proper iptables rules, similar to [the nftables rules](internal/nftables/bee-nftables.conf) the program would apply.
 
-Also, make sure that your endpoint configuration in the frontend blocks your SSH port!
-If you registered the device via the stepper in the tarpit, this is done for you already.
-
-```conf
-#!/usr/sbin/nft -f
-
-flush ruleset
-
-define listen_iface = ens19
-define ssh_port = 22
-
-table inet filter {
-        chain input {
-                type filter hook input priority filter;
-                iifname $listen_iface jump forwarder_block
-        }
-        chain forward {
-                type filter hook forward priority filter;
-        }
-        chain output {
-                type filter hook output priority filter;
-        }
-
-        chain forwarder_block {
-                ct state {established, related} accept
-                tcp dport $ssh_port accept
-
-                meta l4proto {icmp, tcp, udp} drop
-        }
-}
-```
+Also, make sure that your endpoint configuration in the frontend blocks your open ports!
+If you registered the device via the stepper in the tarpit, port 22 is blocked for you already.
 
 ## Usage
 
@@ -74,6 +47,7 @@ table inet filter {
 
 ### Binary
 
+1. Make sure your system has `nftables` installed, since the program uses the `nft` tool.
 1. Do one of the following to get your binary.
     - Get the latest prebuild binary for your architecture from the [releases](https://github.com/Cybersecurity-and-Enterprise-Security/bee/releases) (note that this is currently specifically build for the latest Debian, so it might not work on your local system).
     - [Build](#build) the binary locally.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/apibee"
 	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/heartbeat"
+	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/nftables"
 	"github.com/Cybersecurity-and-Enterprise-Security/bee/pkg/forward"
 	log "github.com/sirupsen/logrus"
 )
@@ -23,7 +24,7 @@ func main() {
 
 	log.WithField("BindAddress", args.BindAddress).Info("Starting Bee")
 
-	err := run(args.BindAddress, args.BeekeeperBasePath)
+	err := run(args.BindAddress, args.DisableNftables, args.BeekeeperBasePath)
 	if err != nil {
 		log.WithError(err).Fatal("failed to run")
 	}
@@ -37,13 +38,25 @@ func recoverPanic(signalChannel chan os.Signal) {
 	}
 }
 
-func run(bindAddress netip.Addr, beekeeperBasePath string) error {
+func run(bindAddress netip.Addr, disableNftables bool, beekeeperBasePath string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	bee, err := startBee(ctx, beekeeperBasePath)
 	if err != nil {
 		return fmt.Errorf("starting bee failed: %w", err)
+	}
+
+	if !disableNftables {
+		err = nftables.ConfigureNftables(bindAddress.String())
+		if err != nil {
+			return fmt.Errorf("configuring nftables: %w", err)
+		}
+		defer func() {
+			if err := nftables.RemoveNftables(); err != nil {
+				log.WithError(err).Error("Removing nftables failed. You may need to remove the rules in the bee_filter table manually.")
+			}
+		}()
 	}
 
 	forwarder, err := forward.NewForwarder(bindAddress, bee.WireGuardIP, bee.WireGuardPrivateKey, bee.BeehiveIPRange)
