@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net/netip"
 	"os"
@@ -18,48 +17,24 @@ import (
 
 const loopRestartInterval = 1 * time.Second
 
-func init() {
-	log.SetLevel(log.DebugLevel)
-}
-
-type arguments struct {
-	BindAddress       netip.Addr
-	BeekeeperBasePath string
-}
-
-func parseArgs() arguments {
-	var result arguments
-	var bindAddress string
-
-	if os.Getenv("BEE_MODE") == "development" {
-		flag.StringVar(&result.BeekeeperBasePath, "beekeeper", "http://localhost:3001/v1", "base path of the beekeeper")
-	} else {
-		result.BeekeeperBasePath = "https://beekeeper.thebeelab.net/v1"
-	}
-
-	flag.StringVar(&bindAddress, "bind", "", "address to bind listener to")
-	flag.Parse()
-
-	if bindAddress == "" {
-		fmt.Fprintln(os.Stderr, "You need to specify a bind address using -bind.")
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	result.BindAddress = netip.MustParseAddr(bindAddress)
-	return result
-}
-
 func main() {
 	args := parseArgs()
+	log.SetLevel(args.LogLevel)
 
-	log.Info("Starting...")
+	log.WithField("BindAddress", args.BindAddress).Info("Starting Bee")
 
 	err := run(args.BindAddress, args.BeekeeperBasePath)
 	if err != nil {
 		log.WithError(err).Fatal("failed to run")
 	}
 	log.Info("Quitting...")
+}
+
+func recoverPanic(signalChannel chan os.Signal) {
+	if err := recover(); err != nil {
+		log.WithField("panic", err).Error("panic occurred, shutting down")
+		close(signalChannel)
+	}
 }
 
 func run(bindAddress netip.Addr, beekeeperBasePath string) error {
@@ -82,7 +57,10 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 
+	defer recoverPanic(signalChannel)
+
 	go func() {
+		defer recoverPanic(signalChannel)
 		for {
 			if err := forwarder.AttackerToBeehiveLoop(ctx); err != nil {
 				log.WithError(err).Error("Attacker to Beehive loop failed. Restarting.")
@@ -96,6 +74,7 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	}()
 
 	go func() {
+		defer recoverPanic(signalChannel)
 		for {
 			if err := forwarder.BeehiveToAttackerLoop(ctx); err != nil {
 				log.WithError(err).Error("Beehive to Attacker loop failed. Restarting.")
@@ -109,6 +88,7 @@ func run(bindAddress netip.Addr, beekeeperBasePath string) error {
 	}()
 
 	go func() {
+		defer recoverPanic(signalChannel)
 		for {
 			if err := heartbeat.Run(ctx); err != nil {
 				log.WithError(err).Error("Heartbeat failed. Restarting.")

@@ -4,11 +4,9 @@ services:
   bee:
     image: ghcr.io/cybersecurity-and-enterprise-security/bee:main
     restart: always
-    command: -bind ...
     network_mode: host
     cap_add:
       - NET_ADMIN
-      - SYS_ADMIN
     volumes:
       - data:/etc/bee
     environment:

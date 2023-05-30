@@ -20,7 +20,7 @@ func (f *Forwarder) setupNetNS() error {
 		return fmt.Errorf("get init netns: %w", err)
 	}
 
-	netns, err := netlink.NewHandleAt(netnsFd)
+	netns, err := netlink.NewHandleAt(netns.None())
 	if err != nil {
 		return fmt.Errorf("get handle for init netns: %w", err)
 	}

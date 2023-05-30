@@ -312,6 +312,6 @@ func (f *Forwarder) UpdateForwardingRules(newRules []ForwardingRule) {
 	f.rules.UpdateForwardingRules(newRules)
 }
 
-func (f *Forwarder) SetDefaultBeehiveAddress(addr string) {
-	f.rules.SetDefaultBeehiveAddress(addr)
+func (f *Forwarder) SetDefaultBeehiveAddress(addr string) error {
+	return f.rules.SetDefaultBeehiveAddress(addr)
 }
