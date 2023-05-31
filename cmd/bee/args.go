@@ -15,6 +15,7 @@ type arguments struct {
 	BindAddress       netip.Addr
 	BeekeeperBasePath string
 	LogLevel          logrus.Level
+	DisableNftables   bool
 }
 
 func parseArgs() arguments {
@@ -29,6 +30,7 @@ func parseArgs() arguments {
 
 	flag.StringVar(&loglevel, "loglevel", "info", "log level to use. See https://github.com/sirupsen/logrus#level-logging for available levels.")
 	flag.StringVar(&bindAddress, "bind", "", "address to bind listener to")
+	flag.BoolVar(&result.DisableNftables, "disableNftables", false, "disable automatic configuration of nftables")
 	flag.Parse()
 
 	if bindAddress == "" {

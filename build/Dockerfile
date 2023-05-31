@@ -16,7 +16,7 @@ COPY --from=base /workspace/bee /
 FROM debian:bullseye-slim as bee
 # Install libpcap-dev, required for running the binary
 RUN apt update && \
-    apt install -y libpcap-dev ca-certificates iproute2 wireguard-tools && \
+    apt install -y libpcap-dev ca-certificates iproute2 wireguard-tools nftables && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
