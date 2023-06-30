@@ -295,15 +295,51 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 			}
 		}
 
-		if err := ipv4.SerializeTo(packetBuffer, opts); err != nil {
-			log.WithError(err).Warn("serialize ipv4")
+		var sockAddr syscall.SockaddrInet4
+		copy(sockAddr.Addr[:], ipv4.DstIP)
+
+		maxPayloadSize := f.iface.MTU - 20 // We assume the IP header is always 20 bytes long.
+		if maxPayloadSize >= len(packetBuffer.Bytes()) {
+			ipv4.FragOffset = 0
+			ipv4.Flags &^= layers.IPv4MoreFragments
+			if err := ipv4.SerializeTo(packetBuffer, opts); err != nil {
+				log.WithError(err).Warn("serialize ipv4")
+				continue
+			}
+			if err := syscall.Sendto(f.attackerInjectFd, packetBuffer.Bytes(), 0, &sockAddr); err != nil {
+				return fmt.Errorf("send packet to attacker: %w", err)
+			}
 			continue
 		}
 
-		var sockAddr syscall.SockaddrInet4
-		copy(sockAddr.Addr[:], ipv4.DstIP)
-		if err := syscall.Sendto(f.attackerInjectFd, packetBuffer.Bytes(), 0, &sockAddr); err != nil {
-			return fmt.Errorf("send packet to attacker: %w", err)
+		// Needs fragmentation.
+		fragmentSize := 8 * (maxPayloadSize / 8)
+		payload := make([]byte, len(packetBuffer.Bytes()))
+		copy(payload[:], packetBuffer.Bytes())
+
+		for offset := 0; offset < len(payload); offset += fragmentSize {
+			if err := packetBuffer.Clear(); err != nil {
+				log.WithError(err).Warn("clearing serialization buffer")
+				continue
+			}
+			if err := gopacket.Payload(payload[offset:min(len(payload), offset+fragmentSize)]).SerializeTo(packetBuffer, opts); err != nil {
+				log.WithError(err).Warn("serialize ip payload")
+				continue
+			}
+			ipv4.Flags &^= layers.IPv4DontFragment
+			ipv4.FragOffset = uint16(offset / 8)
+			if offset+fragmentSize < maxPayloadSize {
+				ipv4.Flags |= layers.IPv4MoreFragments
+			} else {
+				ipv4.Flags &^= layers.IPv4MoreFragments
+			}
+			if err := ipv4.SerializeTo(packetBuffer, opts); err != nil {
+				log.WithError(err).Warn("serialize ipv4")
+				continue
+			}
+			if err := syscall.Sendto(f.attackerInjectFd, packetBuffer.Bytes(), 0, &sockAddr); err != nil {
+				return fmt.Errorf("send packet to attacker: %w", err)
+			}
 		}
 	}
 }
