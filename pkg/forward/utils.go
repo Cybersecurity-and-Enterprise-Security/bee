@@ -33,3 +33,10 @@ func interfaceOfAddress(address netip.Addr) (*net.Interface, error) {
 	}
 	return nil, fmt.Errorf("no interface with address %s", address.String())
 }
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
