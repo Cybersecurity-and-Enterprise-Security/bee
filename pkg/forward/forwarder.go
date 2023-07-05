@@ -328,7 +328,7 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 			}
 			ipv4.Flags &^= layers.IPv4DontFragment
 			ipv4.FragOffset = uint16(offset / 8)
-			if offset+fragmentSize < maxPayloadSize {
+			if offset+fragmentSize <= maxPayloadSize {
 				ipv4.Flags |= layers.IPv4MoreFragments
 			} else {
 				ipv4.Flags &^= layers.IPv4MoreFragments
