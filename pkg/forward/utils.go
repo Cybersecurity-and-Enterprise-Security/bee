@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// InterfaceOf Address returns the network interface of the host with the given
+// interfaceOfAddress returns the network interface of the host with the given
 // IP address. If the address does not exist, it returns nil and an error.
 func interfaceOfAddress(address netip.Addr) (*net.Interface, error) {
 	ifaces, err := net.Interfaces()
