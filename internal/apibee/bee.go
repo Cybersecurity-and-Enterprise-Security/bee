@@ -11,8 +11,8 @@ import (
 
 	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/version"
 	"github.com/Cybersecurity-and-Enterprise-Security/bee/pkg/api"
-	"github.com/deepmap/oapi-codegen/pkg/securityprovider"
 	"github.com/google/uuid"
+	"github.com/oapi-codegen/oapi-codegen/v2/pkg/securityprovider"
 	log "github.com/sirupsen/logrus"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )

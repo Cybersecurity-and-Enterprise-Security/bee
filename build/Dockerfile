@@ -1,5 +1,5 @@
 ARG BUILDER
-FROM --platform=$BUILDPLATFORM golang:bullseye AS base
+FROM --platform=$BUILDPLATFORM golang:bookworm AS base
 
 ARG TARGETARCH
 ARG TARGETVARIANT
@@ -10,10 +10,11 @@ WORKDIR /workspace
 COPY . .
 RUN make build
 
+# This image is used in the GitHub pipeline.
 FROM scratch AS binary
 COPY --from=base /workspace/bee /
 
-FROM debian:bullseye-slim as bee
+FROM debian:bookworm-slim as bee
 # Install libpcap-dev, required for running the binary
 RUN apt update && \
     apt install -y libpcap-dev ca-certificates iproute2 wireguard-tools nftables && \
