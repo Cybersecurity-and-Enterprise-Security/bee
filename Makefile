@@ -5,7 +5,7 @@ PKG := "github.com/Cybersecurity-and-Enterprise-Security/$(PROJECT_NAME)/cmd/$(P
 UNIT_TESTS = $(shell go list ./... | grep -v /e2e)
 
 MIN_GO_MAJOR_VERSION := 1
-MIN_GO_MINOR_VERSION := 19
+MIN_GO_MINOR_VERSION := 22
 
 default: help
 
@@ -35,7 +35,7 @@ tidy-deps: check-go-version ## Remove unused dependencies
 	@go mod tidy
 
 generate-deps: check-go-version
-	go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
+	go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 	@if ! which oapi-codegen > /dev/null 2>&1; then \
 		echo "ERROR: Installed oapi-codegen but it is not in your PATH."; \
 		echo "       Make sure that your Go bin directory is part of your PATH, e.g. using \`export PATH=\$$PATH:~/go/bin\` and then run the command again."; \
