@@ -54,45 +54,67 @@ func RemoveNftables() error {
 
 func getOpenTCPPorts(pfs procfs.FS) ([]uint64, error) {
 	// Read the TCP connection information
-	tcpConns, err := pfs.NetTCP()
+	ipv4TcpConns, err := pfs.NetTCP()
 	if err != nil {
-		return nil, fmt.Errorf("reading TCP connection information: %w", err)
+		return nil, fmt.Errorf("reading TCP connection information for IPv4: %w", err)
+	}
+	ipv6TcpConns, err := pfs.NetTCP6()
+	if err != nil {
+		return nil, fmt.Errorf("reading TCP connection information for IPv6: %w", err)
 	}
 
 	// Extract the open ports from the TCP connections
-	ports := []uint64{}
+	ports := make(map[uint64]struct{})
+	tcpConns := make(procfs.NetTCP, 0, len(ipv4TcpConns)+len(ipv6TcpConns))
+	tcpConns = append(tcpConns, ipv4TcpConns...)
+	tcpConns = append(tcpConns, ipv6TcpConns...)
 	for _, conn := range tcpConns {
 		// See https://github.com/torvalds/linux/blob/master/include/net/tcp_states.h#L22
 		// for the list of states.
 		// 10 is TCP_LISTEN.
 		if conn.St == 10 && conn.Inode != 0 {
-			ports = append(ports, conn.LocalPort)
+			ports[conn.LocalPort] = struct{}{}
 		}
 	}
 
-	return ports, nil
+	portList := make([]uint64, 0, len(ports))
+	for port := range ports {
+		portList = append(portList, port)
+	}
+	return portList, nil
 }
 
 func getOpenUDPPorts(pfs procfs.FS) ([]uint64, error) {
 	// Read the UDP connection information
-	udpConns, err := pfs.NetUDP()
+	ipv4UdpConns, err := pfs.NetUDP()
 	if err != nil {
-		return nil, fmt.Errorf("reading UDP connection information: %w", err)
+		return nil, fmt.Errorf("reading UDP connection information for IPv4: %w", err)
+	}
+	ipv6UdpConns, err := pfs.NetUDP6()
+	if err != nil {
+		return nil, fmt.Errorf("reading UDP connection information for IPv6: %w", err)
 	}
 
 	// Extract the open ports from the UDP connections
-	ports := []uint64{}
+	ports := make(map[uint64]struct{})
+	udpConns := make(procfs.NetTCP, 0, len(ipv4UdpConns)+len(ipv6UdpConns))
+	udpConns = append(udpConns, ipv4UdpConns...)
+	udpConns = append(udpConns, ipv6UdpConns...)
 	for _, conn := range udpConns {
 		// In contrast to TCP, UDP doesn't really have a LISTENING state.
 		// (See https://github.com/torvalds/linux/blob/master/net/ipv4/udp.c which only uses TCP_CLOSE and TCP_ESTABLISHED)
 		// For now, we use all UDP ports to better be safe than sorry.
 		// Maybe, we could only use the ports whose remote address is null, or even those in state 7.
 		if conn.Inode != 0 {
-			ports = append(ports, conn.LocalPort)
+			ports[conn.LocalPort] = struct{}{}
 		}
 	}
 
-	return ports, nil
+	portList := make([]uint64, 0, len(ports))
+	for port := range ports {
+		portList = append(portList, port)
+	}
+	return portList, nil
 }
 
 func installBaseNftables(listenIP string) error {
