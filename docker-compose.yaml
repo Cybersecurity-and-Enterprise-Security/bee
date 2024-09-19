@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   bee:
     image: ghcr.io/cybersecurity-and-enterprise-security/bee:main

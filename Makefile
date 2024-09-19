@@ -24,11 +24,11 @@ check-go-version:
 
 .PHONY: deps
 deps: check-go-version ## Get the dependencies
-	@go get -v -d ./...
+	@go get -v ./...
 
 .PHONY: upgrade-deps
 upgrade-deps: check-go-version ## Upgrade the dependencies
-	@go get -u -v -d ./...
+	@go get -u -v ./...
 
 .PHONY: tidy-deps
 tidy-deps: check-go-version ## Remove unused dependencies
