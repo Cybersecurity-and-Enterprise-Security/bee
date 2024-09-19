@@ -14,13 +14,17 @@ It can:
 
 ## Requirements
 
-Right now, a Linux system like Ubuntu or Debian is required.
-We might extend the program to Windows and others in the future.
+- Debian-based Linux systems
+  - We might extend the program to Windows and others in the future
+- Existence of [`nftables`](https://wiki.debian.org/nftables) in your system
+  - And disabling `iptables`
+- This repository
+  - Run the command `git clone https://github.com/Cybersecurity-and-Enterprise-Security/bee.git`
 
 Because we need to drop the Kernel responses to incoming traffic (to avoid that the Kernel sends RST packets for closed ports), we apply [an nftables](internal/nftables/bee-nftables.conf) configuration automatically.
 Open ports are excluded from the rules to avoid that running services like SSH are blocked.
 
-**Note**: We currently only support nftables.
+**Note**: We currently only support [`nftables`](https://wiki.debian.org/nftables).
 If your system is using legacy iptables (not `iptables-nft`), disable automatic nftables generation using the `-disableNftables` flag.
 Then, please make sure that you apply proper iptables rules, similar to [the nftables rules](internal/nftables/bee-nftables.conf) the program would apply.
 
@@ -30,16 +34,18 @@ If you registered the device via the stepper in the tarpit, port 22 is blocked f
 ## Usage
 
 1. Make sure the [requirements](#requirements) for running the Bee are met on your system.
-1. Create a new endpoint in the Beekeeper using the frontend or API directly.
-1. Copy the registration token.
+1. Create a new endpoint in the Beekeeper using the frontend (Alvarium) or API directly.
+1. Copy the registration token from the new endpoint.
 
 ### Docker (recommended)
 
-1. Make sure that your machine has `docker` and `docker-compose` installed.
-1. Copy the [docker-compose.yaml](./docker-compose.yaml) to your machine.
-1. Adjust the `-bind` argument accordingly to your setup. Usually, this will be the IP of your public-facing interface (the one with the default route).
-1. Set the `BEE_REGISTRATION_TOKEN` environment variable to the value you copied above.
-1. Start the container
+1. Make sure that your machine has `docker` and `docker compose` installed.
+1. Edit the [docker-compose.yaml](./docker-compose.yaml) in your machine by
+    - Setting the `BEE_REGISTRATION_TOKEN` environment variable (line 13) to the value you copied above.
+    - Optional: adjusting the `-bind` argument accordingly to your setup. Usually, this will be the IP of your public-facing interface (the one with the default route).
+    - Optional: specifying the URL of the beekeeper (backend).
+    - Please refer to [docker-compose-template.yaml](./docker-compose-template.yaml) to see how these *optional* arguments are used.
+1. Start the container by running the following command:
 
     ```bash
     docker compose up -d

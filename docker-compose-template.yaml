@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  bee:
+    image: ghcr.io/cybersecurity-and-enterprise-security/bee:main
+    restart: always
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - data:/etc/bee
+    environment:
+      - BEE_REGISTRATION_TOKEN=[Token Copied from Frontend or API]
+      - BEE_MODE=development # if you would like to specify a beekeeper URL, use this variable.
+    command: -beekeeper [URL of Beekeeper] -bind [IP address of your machine's public-facing interface]
+
+volumes:
+  data:
