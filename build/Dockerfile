@@ -1,4 +1,3 @@
-ARG BUILDER
 FROM --platform=$BUILDPLATFORM golang:bookworm AS base
 
 ARG TARGETARCH
