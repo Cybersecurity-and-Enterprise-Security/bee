@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/Cybersecurity-and-Enterprise-Security/bee/internal/apibee"
@@ -18,16 +19,20 @@ const (
 )
 
 type Heartbeat struct {
-	bee         *apibee.Bee
-	forwarder   *forward.Forwarder
-	bindAddress netip.Addr
+	bee             *apibee.Bee
+	forwarder       *forward.Forwarder
+	bindAddress     netip.Addr
+	startupComplete bool
+	configReceived  *sync.WaitGroup
 }
 
-func NewHeartbeat(bee *apibee.Bee, forwarder *forward.Forwarder, bindAddress netip.Addr) *Heartbeat {
+func NewHeartbeat(bee *apibee.Bee, forwarder *forward.Forwarder, bindAddress netip.Addr, configReceived *sync.WaitGroup) *Heartbeat {
 	return &Heartbeat{
 		bee,
 		forwarder,
 		bindAddress,
+		false,
+		configReceived,
 	}
 }
 
@@ -35,6 +40,10 @@ func (h *Heartbeat) Run(ctx context.Context) error {
 	for {
 		h.ReportStats(ctx)
 		h.UpdateForwardings(ctx)
+		if !h.startupComplete {
+			h.startupComplete = true
+			h.configReceived.Done()
+		}
 
 		select {
 		case <-ctx.Done():
