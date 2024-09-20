@@ -62,6 +62,10 @@ If you registered the device via the stepper in the tarpit, port 22 is blocked f
 
 ## Build
 
+1. Go must be installed on the machine. Please follow [this instruction](https://go.dev/doc/install) from the official Go website to install the latest version.
+
+1. Make sure that the `bin` folder of your Go installation is part of your `PATH`, e.g. `export PATH+=:~/go/bin`.
+
 1. Building the binary requires the libpcap header files, which are part of the `libpcap-dev` package on Debian-based distros. Adjust the command according to your package manager.
 
     ```bash
@@ -81,7 +85,6 @@ If you registered the device via the stepper in the tarpit, port 22 is blocked f
     make generate-deps
     ```
 
-1. Make sure that the `bin` folder of your Go installation is part of your `PATH`, e.g. `export PATH+=:~/go/bin`.
 1. Build the binary.
 
     ```bash
