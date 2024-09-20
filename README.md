@@ -35,8 +35,8 @@ If you registered the device via the stepper in the tarpit, port 22 is blocked f
 
 ### Docker (recommended)
 
-1. Make sure that your machine has `docker` and `docker-compose` installed.
-1. Copy the [docker-compose.yaml](./docker-compose.yaml) to your machine.
+1. Make sure that your machine has `docker` with its `compose` plugin installed.
+1. Copy the [compose.yaml](./compose.yaml) to your machine.
 1. Adjust the `-bind` argument accordingly to your setup. Usually, this will be the IP of your public-facing interface (the one with the default route).
 1. Set the `BEE_REGISTRATION_TOKEN` environment variable to the value you copied above.
 1. Start the container
