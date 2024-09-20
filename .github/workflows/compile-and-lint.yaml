@@ -1,32 +1,32 @@
-name: Run Tests
+name: Compile and Lint
 
 on:
   push:
     branches: [ "main" ]
-    # Publish semver tags as releases.
+    # Also run on semver tags to compile and lint them.
     tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ "main" ]
 
 jobs:
-  test:
+  compile-and-lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.22
+          go-version: 1.23
 
       - name: Install dependencies
-        run: sudo apt install -y libpcap-dev
+        run: sudo apt install -y libpcap-dev make
 
       - name: Install linter
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0
 
       - name: Compile
         run: make build
