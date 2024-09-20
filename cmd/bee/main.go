@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -65,7 +66,8 @@ func run(bindAddress netip.Addr, disableNftables bool, beekeeperBasePath string)
 	}
 	defer forwarder.Close()
 
-	heartbeat := heartbeat.NewHeartbeat(bee, forwarder, bindAddress)
+	var configReceived sync.WaitGroup
+	heartbeat := heartbeat.NewHeartbeat(bee, forwarder, bindAddress, &configReceived)
 
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
@@ -74,6 +76,7 @@ func run(bindAddress netip.Addr, disableNftables bool, beekeeperBasePath string)
 
 	go func() {
 		defer recoverPanic(signalChannel)
+		configReceived.Wait()
 		for {
 			if err := forwarder.AttackerToBeehiveLoop(ctx); err != nil {
 				log.WithError(err).Error("Attacker to Beehive loop failed. Restarting.")
@@ -88,6 +91,7 @@ func run(bindAddress netip.Addr, disableNftables bool, beekeeperBasePath string)
 
 	go func() {
 		defer recoverPanic(signalChannel)
+		configReceived.Wait()
 		for {
 			if err := forwarder.BeehiveToAttackerLoop(ctx); err != nil {
 				log.WithError(err).Error("Beehive to Attacker loop failed. Restarting.")
