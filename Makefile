@@ -5,7 +5,7 @@ PKG := "github.com/Cybersecurity-and-Enterprise-Security/$(PROJECT_NAME)/cmd/$(P
 UNIT_TESTS = $(shell go list ./... | grep -v /e2e)
 
 MIN_GO_MAJOR_VERSION := 1
-MIN_GO_MINOR_VERSION := 22
+MIN_GO_MINOR_VERSION := 23
 
 default: help
 
