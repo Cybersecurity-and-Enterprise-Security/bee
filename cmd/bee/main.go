@@ -135,6 +135,6 @@ func startBee(ctx context.Context, beekeeperBasePath string) (*apibee.Bee, error
 		return nil, fmt.Errorf("getting bee's name failed: %w", err)
 	}
 
-	log.WithField("name", name).Infof("Bee starting")
+	log.WithField("name", name).Infof("Retrieving the bee's name")
 	return bee, nil
 }
