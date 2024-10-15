@@ -1,0 +1,15 @@
+# Ignore everything.
+*
+
+# Builder container:
+!go.mod
+!go.sum
+!build/deps.sh
+!Makefile
+!api
+!cmd
+!internal
+!pkg
+
+# Runtime container:
+!bee
