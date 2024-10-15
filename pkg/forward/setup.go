@@ -15,23 +15,23 @@ import (
 
 // setupNetNS creates a handle to the current network namespace.
 func (f *Forwarder) setupNetNS() error {
-	netnsFd, err := netns.Get()
+	currentNetnsFd, err := netns.Get()
 	if err != nil {
 		return fmt.Errorf("get init netns: %w", err)
 	}
 
-	netns, err := netlink.NewHandleAt(netns.None())
+	currentNetns, err := netlink.NewHandleAt(netns.None())
 	if err != nil {
 		return fmt.Errorf("get handle for init netns: %w", err)
 	}
 
-	f.netnsFd = &netnsFd
-	f.netns = netns
+	f.netnsFd = &currentNetnsFd
+	f.netns = currentNetns
 
 	return nil
 }
 
-// setupWireguard creates and configures the WireGuard interface and moves it to the forwarder namespace.
+// setupWireguard creates and configures the WireGuard interface.
 func (f *Forwarder) setupWireguard(wireguardPrivateKey, wireguardAddress, beehiveRange string) error {
 	var err error
 

@@ -1,0 +1,14 @@
+# Ignore everything.
+*
+
+# Builder container:
+!go.mod
+!go.sum
+!build/deps.sh
+!api
+!cmd
+!internal
+!pkg
+
+# Runtime container:
+!bee

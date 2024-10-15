@@ -22,7 +22,7 @@ func main() {
 	args := parseArgs()
 	log.SetLevel(args.LogLevel)
 
-	log.WithField("BindAddress", args.BindAddress).Info("Starting Bee")
+	log.WithField("BindAddress", args.BindAddress).Info("Starting bee...")
 
 	err := run(args.BindAddress, args.DisableNftables, args.BeekeeperBasePath)
 	if err != nil {
@@ -117,8 +117,12 @@ func run(bindAddress netip.Addr, disableNftables bool, beekeeperBasePath string)
 		}
 	}()
 
-	sig := <-signalChannel
-	log.WithField("signal", sig).Info("Received signal, shutting down")
+	log.Info("Bee startup complete")
+
+	sig, ok := <-signalChannel
+	if ok {
+		log.WithField("signal", sig).Info("Received signal, shutting down")
+	}
 
 	return nil
 }
@@ -130,14 +134,14 @@ func startBee(ctx context.Context, beekeeperBasePath string) (*apibee.Bee, error
 	}
 
 	if err := bee.Startup(ctx); err != nil {
-		return nil, fmt.Errorf("starting bee: %w", err)
+		return nil, fmt.Errorf("reporting startup: %w", err)
 	}
 
 	name, err := bee.Name(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("getting bee's name failed: %w", err)
+		return nil, fmt.Errorf("requesting name: %w", err)
 	}
+	log.WithField("name", name).Infof("Bee name was retrieved successfully")
 
-	log.WithField("name", name).Infof("Bee starting")
 	return bee, nil
 }

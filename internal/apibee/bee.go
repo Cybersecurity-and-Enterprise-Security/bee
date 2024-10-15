@@ -52,13 +52,14 @@ func LoadOrRegisterBee(beekeeperBaseURL string) (*Bee, error) {
 			if registrationToken != "" {
 				log.Info("Read registration token from environment.")
 			} else {
-				fmt.Println("Please enter the registration token: ")
+				fmt.Println("Please enter the registration token:")
 				if _, err := fmt.Scanln(&registrationToken); err != nil {
 					return nil, fmt.Errorf("reading registration token: %w", err)
 				}
 			}
 
 			if err := bee.register(registrationToken); err != nil {
+				log.Error("Registering the bee failed. The most common cause is a wrong registration token.")
 				return nil, fmt.Errorf("registration: %w", err)
 			}
 

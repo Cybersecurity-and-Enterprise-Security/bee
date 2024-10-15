@@ -25,19 +25,19 @@ If your system is using legacy iptables (not `iptables-nft`), disable automatic 
 Then, please make sure that you apply proper iptables rules, similar to [the nftables rules](internal/nftables/bee-nftables.conf) the program would apply.
 
 Also, make sure that your endpoint configuration in the frontend blocks your open ports!
-If you registered the device via the stepper in the tarpit, port 22 is blocked for you already.
 
 ## Usage
 
 1. Make sure the [requirements](#requirements) for running the Bee are met on your system.
 1. Create a new endpoint in the Beekeeper using the frontend or API directly.
 1. Copy the registration token.
+1. **Note**: Both versions (Docker and binary) choose an IP address to bind to by default [based on your default routes](cmd/bee/args.go). Usually, this should be correct. If your host retrieves the external traffic on a separate IP address, adjust it using the `-bind <ipAddress>` flag.
 
 ### Docker (recommended)
 
-1. Make sure that your machine has `docker` and `docker-compose` installed.
-1. Copy the [docker-compose.yaml](./docker-compose.yaml) to your machine.
-1. Adjust the `-bind` argument accordingly to your setup. Usually, this will be the IP of your public-facing interface (the one with the default route).
+1. Make sure that your machine has `docker` with its `compose` plugin installed.
+1. Copy the [compose.yaml](./compose.yaml) to your machine.
+1. If you need to adjust one of the flags described above, do so with the `command` field in the compose file (the entrypoint of the Docker image is set to the binary).
 1. Set the `BEE_REGISTRATION_TOKEN` environment variable to the value you copied above.
 1. Start the container
 
@@ -51,7 +51,7 @@ If you registered the device via the stepper in the tarpit, port 22 is blocked f
 1. Do one of the following to get your binary.
     - Get the latest prebuild binary for your architecture from the [releases](https://github.com/Cybersecurity-and-Enterprise-Security/bee/releases) (note that this is currently specifically build for the latest Debian, so it might not work on your local system).
     - [Build](#build) the binary locally.
-1. Currently, the binary requires elevated privileges because of the network operations. Hence, either run the binary with `sudo`, or set the necessary capabilities using `sudo setcap cap_net_admin,cap_net_raw=eip ./bee`. **Note**: The program choses an IP address to bind to by default [based on your default routes](cmd/bee/args.go). Most of the times, this should be correct. If your host retrieves the external traffic on a separate IP address, adjust it using the `-bind <ipAddress>` flag.
+1. Currently, the binary requires elevated privileges because of the network operations. Hence, either run the binary with `sudo`, or set the necessary capabilities using `sudo setcap cap_net_admin,cap_net_raw=eip ./bee`. Remember to also set the flags described above if needed.
 
     ```bash
     sudo ./bee
