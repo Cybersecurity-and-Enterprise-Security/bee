@@ -2,6 +2,7 @@ package heartbeat
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/netip"
 	"time"
@@ -23,18 +24,29 @@ type Heartbeat struct {
 	bindAddress netip.Addr
 }
 
-func NewHeartbeat(bee *apibee.Bee, forwarder *forward.Forwarder, bindAddress netip.Addr) *Heartbeat {
-	return &Heartbeat{
+func NewHeartbeat(ctx context.Context, bee *apibee.Bee, forwarder *forward.Forwarder, bindAddress netip.Addr) (*Heartbeat, error) {
+	heartbeat := &Heartbeat{
 		bee,
 		forwarder,
 		bindAddress,
 	}
+
+	// updateForwardings fetches necessary information for the forwarder from the beekeeper.
+	if err := heartbeat.updateForwardings(ctx); err != nil {
+		return nil, fmt.Errorf("initializing heartbeat: %w", err)
+	}
+
+	return heartbeat, nil
 }
 
 func (h *Heartbeat) Run(ctx context.Context) error {
 	for {
-		h.ReportStats(ctx)
-		h.UpdateForwardings(ctx)
+		if err := h.reportStats(ctx); err != nil {
+			return fmt.Errorf("reporting stats: %w", err)
+		}
+		if err := h.updateForwardings(ctx); err != nil {
+			return fmt.Errorf("updating forwardings: %w", err)
+		}
 
 		select {
 		case <-ctx.Done():
@@ -44,26 +56,27 @@ func (h *Heartbeat) Run(ctx context.Context) error {
 	}
 }
 
-func (h *Heartbeat) ReportStats(ctx context.Context) {
+func (h *Heartbeat) reportStats(ctx context.Context) error {
 	if err := h.bee.ReportStatistics(ctx, h.bindAddress.String()); err != nil {
-		log.WithError(err).Warn("Error during heartbeat")
+		return fmt.Errorf("contacting beekeeper: %w", err)
 	}
+	return nil
 }
 
-func (h *Heartbeat) UpdateForwardings(ctx context.Context) {
+func (h *Heartbeat) updateForwardings(ctx context.Context) error {
 	info, err := h.bee.GetForwardingInformation(ctx)
 	if err != nil {
-		log.WithError(err).Error("Error getting forwarding information")
-		return
+		return fmt.Errorf("getting forwarding information: %w", err)
 	}
 
 	err = h.forwarder.SetDefaultBeehiveAddress(info.DefaultBeehive)
 	if err != nil {
-		log.WithError(err).Error("Error updating default beehive address")
+		return fmt.Errorf("updating default beehive address: %w", err)
 	} else {
 		log.WithField("beehive", info.DefaultBeehive).Debug("Updated default beehive")
 	}
 
+	// Errors are only logged here because some beehives may be operational.
 	newBeehives := make([]forward.WireguardBeehive, 0, len(info.Beehives))
 	for _, beehive := range info.Beehives {
 		log := log.WithField("beehive", beehive)
@@ -95,7 +108,7 @@ func (h *Heartbeat) UpdateForwardings(ctx context.Context) {
 	}
 
 	if err := h.forwarder.UpdateWireguardPeers(newBeehives); err != nil {
-		log.WithError(err).Error("updating wireguard peers")
+		return fmt.Errorf("updating wireguard peers: %w", err)
 	}
 
 	newForwardingRules := make([]forward.ForwardingRule, 0, len(info.Forwardings))
@@ -119,4 +132,6 @@ func (h *Heartbeat) UpdateForwardings(ctx context.Context) {
 	}
 
 	h.forwarder.UpdateForwardingRules(newForwardingRules)
+
+	return nil
 }

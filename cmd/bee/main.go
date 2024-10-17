@@ -65,7 +65,10 @@ func run(bindAddress netip.Addr, disableNftables bool, beekeeperBasePath string)
 	}
 	defer forwarder.Close()
 
-	heartbeat := heartbeat.NewHeartbeat(bee, forwarder, bindAddress)
+	heartbeat, err := heartbeat.NewHeartbeat(ctx, bee, forwarder, bindAddress)
+	if err != nil {
+		return fmt.Errorf("creating heartbeat service: %w", err)
+	}
 
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
