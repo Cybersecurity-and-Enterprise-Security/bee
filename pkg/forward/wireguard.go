@@ -15,16 +15,14 @@ const (
 )
 
 var (
-	IPv4MaskOnes = net.IPv4Mask(255, 255, 255, 255)
-	// The beehive keeps the wireguard connection to the bees alive (to prevent
-	// NAT closing), for the case that a honeypot wants to send out data.
+	IPv4MaskOnes                = net.IPv4Mask(255, 255, 255, 255)
 	PersistentKeepaliveInterval = 30 * time.Second
 )
 
 type WireguardBeehive struct {
-	PublicKey wgtypes.Key
-	Address   net.IP
-	Endpoint  *net.UDPAddr
+	PublicKey   wgtypes.Key
+	WireguardIp net.IP
+	Endpoint    *net.UDPAddr
 }
 
 // UpdateWireguardPeers updates the wireguard peers (bees) of the forwarder.
@@ -82,7 +80,7 @@ func diffWireguardPeers(oldPeers []wgtypes.Peer, newPeers []WireguardBeehive) []
 				Remove:    true,
 			})
 		} else if len(oldPeerConfig.AllowedIPs) == 1 &&
-			oldPeerConfig.AllowedIPs[0].IP.Equal(newPeer.Address) &&
+			oldPeerConfig.AllowedIPs[0].IP.Equal(newPeer.WireguardIp) &&
 			oldPeerConfig.Endpoint != nil && oldPeerConfig.Endpoint.IP.Equal(newPeer.Endpoint.IP) && oldPeerConfig.Endpoint.Port == newPeer.Endpoint.Port {
 			// Peer stayed the same.
 		} else {
@@ -91,7 +89,7 @@ func diffWireguardPeers(oldPeers []wgtypes.Peer, newPeers []WireguardBeehive) []
 				PublicKey:         oldPeerKey,
 				UpdateOnly:        true,
 				ReplaceAllowedIPs: true,
-				AllowedIPs:        []net.IPNet{{IP: newPeer.Address, Mask: IPv4MaskOnes}},
+				AllowedIPs:        []net.IPNet{{IP: newPeer.WireguardIp, Mask: IPv4MaskOnes}},
 				Endpoint:          newPeer.Endpoint,
 			})
 		}
@@ -102,9 +100,10 @@ func diffWireguardPeers(oldPeers []wgtypes.Peer, newPeers []WireguardBeehive) []
 		if !ok {
 			// Peer is new.
 			diff = append(diff, wgtypes.PeerConfig{
-				PublicKey:                   newPeerKey,
-				ReplaceAllowedIPs:           true,
-				AllowedIPs:                  []net.IPNet{{IP: newPeerConfig.Address, Mask: IPv4MaskOnes}},
+				PublicKey:         newPeerKey,
+				ReplaceAllowedIPs: true,
+				AllowedIPs:        []net.IPNet{{IP: newPeerConfig.WireguardIp, Mask: IPv4MaskOnes}},
+				// The bee keeps the wireguard connections to the beehives alive.
 				PersistentKeepaliveInterval: &PersistentKeepaliveInterval,
 				Endpoint:                    newPeerConfig.Endpoint,
 			})

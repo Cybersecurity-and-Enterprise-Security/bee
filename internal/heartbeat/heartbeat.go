@@ -88,9 +88,9 @@ func (h *Heartbeat) updateForwardings(ctx context.Context) error {
 			log.WithError(err).Error("Parsing public key")
 			continue
 		}
-		address := net.ParseIP(beehive.Ip)
-		if address == nil {
-			log.Error("Error parsing IP")
+		wireguardIp := net.ParseIP(beehive.Ip)
+		if wireguardIp == nil {
+			log.Error("Error parsing wireguard IP of beehive")
 			continue
 		}
 
@@ -101,9 +101,9 @@ func (h *Heartbeat) updateForwardings(ctx context.Context) error {
 		}
 
 		newBeehives = append(newBeehives, forward.WireguardBeehive{
-			PublicKey: publicKey,
-			Address:   address,
-			Endpoint:  net.UDPAddrFromAddrPort(endpoint),
+			PublicKey:   publicKey,
+			WireguardIp: wireguardIp,
+			Endpoint:    net.UDPAddrFromAddrPort(endpoint),
 		})
 	}
 

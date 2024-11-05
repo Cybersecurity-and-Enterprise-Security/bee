@@ -2,10 +2,6 @@
 /bee
 bin/
 
-# go coverage reports
-coverage.cov
-coverage_unit.html
-
 # Bee Store
 bee.store
 

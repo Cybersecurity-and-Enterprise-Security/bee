@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/prometheus/procfs"
+	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
 
@@ -71,8 +72,7 @@ func getOpenTCPPorts(pfs procfs.FS) ([]uint64, error) {
 	for _, conn := range tcpConns {
 		// See https://github.com/torvalds/linux/blob/master/include/net/tcp_states.h#L22
 		// for the list of states.
-		// 10 is TCP_LISTEN.
-		if conn.St == 10 && conn.Inode != 0 {
+		if conn.St == netlink.TCP_LISTEN && conn.Inode != 0 {
 			ports[conn.LocalPort] = struct{}{}
 		}
 	}

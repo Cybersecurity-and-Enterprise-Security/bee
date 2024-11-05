@@ -18,7 +18,6 @@ import (
 )
 
 const GenevePort = 6081
-const WireguardPort = 8335
 
 type Forwarder struct {
 	attackerCapture  *pcap.Handle // Handle to capture packets from the attacker
@@ -62,7 +61,7 @@ func NewForwarder(bind netip.Addr, wireguardAddress, wireguardPrivateKey, beehiv
 		return nil, fmt.Errorf("setting up attacker capture: %w", err)
 	}
 
-	// Create the connection after we setup WireGuard, because otherwise we can't listen on the Geneve port at the WireGuard IP
+	// Create the connection after we set up WireGuard, because otherwise we can't listen on the Geneve port at the WireGuard IP
 	if err := forwarder.setupBeehiveConnection(); err != nil {
 		return nil, fmt.Errorf("setting up beehive connection: %w", err)
 	}
@@ -109,7 +108,7 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 		}
 		ipv4Fragment := ipv4FragmentLayer.(*layers.IPv4)
 
-		// Defragment packets to we can send them the the beehive in one piece.
+		// Defragment packets to we can send them the beehive in one piece.
 		ipv4, err := f.defragger.DefragIPv4(ipv4Fragment)
 		if err != nil {
 			return fmt.Errorf("defragment: %w", err)
