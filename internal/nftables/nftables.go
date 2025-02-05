@@ -4,12 +4,14 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"net"
 	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/prometheus/procfs"
+	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -24,11 +26,11 @@ func ConfigureNftables(listenIP string) error {
 		return fmt.Errorf("opening proc filesystem: %w", err)
 	}
 
-	tcpPorts, err := getOpenTCPPorts(pfs)
+	tcpPorts, err := getOpenTCPPorts(pfs, listenIP)
 	if err != nil {
 		return fmt.Errorf("getting open TCP ports: %w", err)
 	}
-	udpPorts, err := getOpenUDPPorts(pfs)
+	udpPorts, err := getOpenUDPPorts(pfs, listenIP)
 	if err != nil {
 		return fmt.Errorf("getting open UDP ports: %w", err)
 	}
@@ -36,6 +38,11 @@ func ConfigureNftables(listenIP string) error {
 	if err := installBaseNftables(listenIP); err != nil {
 		return fmt.Errorf("installing base nftables: %w", err)
 	}
+
+	log.
+		WithField("tcp", tcpPorts).
+		WithField("udp", udpPorts).
+		Info("Not exposing ports because local applications are listening on them")
 
 	if err := addOpenTCPPorts(tcpPorts...); err != nil {
 		return fmt.Errorf("adding open tcp ports: %w", err)
@@ -53,7 +60,7 @@ func RemoveNftables() error {
 	return runNftablesCommand(cmd)
 }
 
-func getOpenTCPPorts(pfs procfs.FS) ([]uint64, error) {
+func getOpenTCPPorts(pfs procfs.FS, listenIP string) ([]uint64, error) {
 	// Read the TCP connection information
 	ipv4TcpConns, err := pfs.NetTCP()
 	if err != nil {
@@ -73,7 +80,9 @@ func getOpenTCPPorts(pfs procfs.FS) ([]uint64, error) {
 		// See https://github.com/torvalds/linux/blob/master/include/net/tcp_states.h#L22
 		// for the list of states.
 		if conn.St == netlink.TCP_LISTEN && conn.Inode != 0 {
-			ports[conn.LocalPort] = struct{}{}
+			if conn.LocalAddr.Equal(net.IPv4zero) || conn.LocalAddr.Equal(net.ParseIP(listenIP)) {
+				ports[conn.LocalPort] = struct{}{}
+			}
 		}
 	}
 
@@ -84,7 +93,7 @@ func getOpenTCPPorts(pfs procfs.FS) ([]uint64, error) {
 	return portList, nil
 }
 
-func getOpenUDPPorts(pfs procfs.FS) ([]uint64, error) {
+func getOpenUDPPorts(pfs procfs.FS, listenIP string) ([]uint64, error) {
 	// Read the UDP connection information
 	ipv4UdpConns, err := pfs.NetUDP()
 	if err != nil {
@@ -106,7 +115,9 @@ func getOpenUDPPorts(pfs procfs.FS) ([]uint64, error) {
 		// For now, we use all UDP ports to better be safe than sorry.
 		// Maybe, we could only use the ports whose remote address is null, or even those in state 7.
 		if conn.Inode != 0 {
-			ports[conn.LocalPort] = struct{}{}
+			if conn.LocalAddr.Equal(net.IPv4zero) || conn.LocalAddr.Equal(net.ParseIP(listenIP)) {
+				ports[conn.LocalPort] = struct{}{}
+			}
 		}
 	}
 
