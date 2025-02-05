@@ -231,8 +231,10 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 	var ipv4 layers.IPv4
 	var udp layers.UDP
 	var tcp layers.TCP
-	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeGeneve, &geneve, &ipv4, &udp, &tcp)
-	parser.IgnoreUnsupported = true
+	geneveParser := gopacket.NewDecodingLayerParser(layers.LayerTypeGeneve, &geneve)
+	geneveParser.IgnoreUnsupported = true
+	innerParser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ipv4, &udp, &tcp)
+	innerParser.IgnoreUnsupported = true
 	decoded := []gopacket.LayerType{}
 
 	packetBuffer := gopacket.NewSerializeBuffer()
@@ -255,13 +257,23 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 			return fmt.Errorf("receive packet: %w", err)
 		}
 
-		if err := parser.DecodeLayers(buffer[:n], &decoded); err != nil {
-			log.WithError(err).Warn("decoding layers")
+		if err := geneveParser.DecodeLayers(buffer[:n], &decoded); err != nil {
+			log.WithError(err).Warn("decoding geneve")
 			continue
 		}
 
-		if len(decoded) < 2 || decoded[0] != layers.LayerTypeGeneve || decoded[1] != layers.LayerTypeIPv4 {
-			fmt.Printf("packet has wrong structure: %s\n", decoded)
+		if len(decoded) < 1 || decoded[0] != layers.LayerTypeGeneve {
+			log.WithField("layers", decoded).Warn("packet is not geneve")
+			continue
+		}
+
+		if err := innerParser.DecodeLayers(geneve.Payload, &decoded); err != nil {
+			log.WithError(err).Warn("decoding inner layers")
+			continue
+		}
+
+		if len(decoded) < 1 || decoded[0] != layers.LayerTypeIPv4 {
+			log.WithField("layers", decoded).Warn("inner packet has wrong structure")
 			continue
 		}
 
@@ -272,8 +284,8 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 			// However, if that should occur at some point, just create a new buffer instead of clearing the old one.
 			packetBuffer = gopacket.NewSerializeBuffer()
 		}
-		if len(decoded) >= 3 {
-			switch decoded[2] {
+		if len(decoded) >= 2 {
+			switch decoded[1] {
 			case layers.LayerTypeUDP:
 				if err := udp.SetNetworkLayerForChecksum(&ipv4); err != nil {
 					log.WithError(err).Warn("udp: setting network layer for checksum")
