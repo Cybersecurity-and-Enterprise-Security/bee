@@ -3,6 +3,7 @@ module github.com/Cybersecurity-and-Enterprise-Security/bee
 go 1.23.0
 
 require (
+	github.com/florianl/go-nflog/v2 v2.1.0
 	github.com/google/gopacket v1.1.19
 	github.com/google/uuid v1.6.0
 	github.com/oapi-codegen/oapi-codegen/v2 v2.4.1

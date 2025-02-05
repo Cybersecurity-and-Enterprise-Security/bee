@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"syscall"
 
-	"github.com/google/gopacket/pcap"
+	"github.com/florianl/go-nflog/v2"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.zx2c4.com/wireguard/wgctrl"
@@ -99,32 +99,21 @@ func (f *Forwarder) setupAttackerCapture(bind netip.Addr) error {
 	}
 	f.iface = iface
 
-	handle, err := pcap.NewInactiveHandle(iface.Name)
+	nf, err := nflog.Open(&nflog.Config{
+		Group:    833,
+		Copymode: nflog.CopyPacket,
+		// Push to userspace after 10 ms
+		Timeout: 1,
+	})
 	if err != nil {
-		return fmt.Errorf("create inactive handle: %w", err)
-	}
-	if err := handle.SetImmediateMode(true); err != nil {
-		return fmt.Errorf("set immediate mode: %w", err)
-	}
-	if err := handle.SetTimeout(pcap.BlockForever); err != nil {
-		return fmt.Errorf("set timeout: %w", err)
-	}
-	if err := handle.SetSnapLen(1600); err != nil {
-		return fmt.Errorf("set snap length: %w", err)
+		return err
 	}
 
-	attackerCapture, err := handle.Activate()
-	if err != nil {
-		return fmt.Errorf("activate handle: %w", err)
-	}
-	if err := attackerCapture.SetBPFFilter(fmt.Sprintf("host %s", bind)); err != nil {
-		return fmt.Errorf("set BPF filter: %w", err)
-	}
-	if err := attackerCapture.SetDirection(pcap.DirectionIn); err != nil {
-		return fmt.Errorf("set direction: %w", err)
+	if err := nf.SetOption(syscall.NETLINK_NO_ENOBUFS, true); err != nil {
+		return fmt.Errorf("failed to set netlink NO_ENOBUFS option: %v", err)
 	}
 
-	f.attackerCapture = attackerCapture
+	f.attackerCapture = nf
 
 	return nil
 }
@@ -145,6 +134,12 @@ func (f *Forwarder) setupAttackerInject() error {
 	}
 	if err := syscall.SetsockoptString(fd, syscall.SOL_SOCKET, syscall.SO_BINDTODEVICE, f.iface.Name); err != nil {
 		return fmt.Errorf("bind raw socket: %w", err)
+	}
+
+	// Apply the mark 0x10 to all packets from this socket.
+	// This is used in nftables to tell them apart from normal connections from the bee, e.g. to the beekeeper.
+	if err := syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_MARK, 0x10); err != nil {
+		return fmt.Errorf("set socket mark: %w", err)
 	}
 	f.attackerInjectFd = fd
 
@@ -184,6 +179,10 @@ func (f *Forwarder) Close() error {
 
 	if err := f.closeNetns(); err != nil {
 		return fmt.Errorf("closing network namespace: %w", err)
+	}
+
+	if err := f.attackerCapture.Close(); err != nil {
+		return fmt.Errorf("closing nflog: %w", err)
 	}
 
 	return nil

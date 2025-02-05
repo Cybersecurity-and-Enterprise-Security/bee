@@ -7,10 +7,10 @@ import (
 	"net/netip"
 	"syscall"
 
+	"github.com/florianl/go-nflog/v2"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/ip4defrag"
 	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -20,7 +20,7 @@ import (
 const GenevePort = 6081
 
 type Forwarder struct {
-	attackerCapture  *pcap.Handle // Handle to capture packets from the attacker
+	attackerCapture  *nflog.Nflog // Handle to capture packets from the attacker
 	attackerInjectFd int          // File descriptor of the socket for sending packets to the attacker
 	beehiveConn      *net.UDPConn // Geneve connection to the beehive
 	listenAddress    netip.Addr   // address on which the bee listens for packets from the attacker
@@ -74,8 +74,6 @@ func NewForwarder(bind netip.Addr, wireguardAddress, wireguardPrivateKey, beehiv
 }
 
 func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
-	packetSource := gopacket.NewPacketSource(f.attackerCapture, layers.LinkTypeEthernet)
-
 	geneve := layers.Geneve{
 		Protocol: layers.EthernetTypeIPv4, // IPv4 content
 	}
@@ -86,9 +84,12 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 		ComputeChecksums: true,
 	}
 
+	ipv4 := layers.IPv4{}
 	udp := layers.UDP{}
 	tcp := layers.TCP{}
 
+	ipParser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ipv4)
+	ipParser.IgnoreUnsupported = true
 	udpParser := gopacket.NewDecodingLayerParser(layers.LayerTypeUDP, &udp)
 	udpParser.IgnoreUnsupported = true
 	tcpParser := gopacket.NewDecodingLayerParser(layers.LayerTypeTCP, &tcp)
@@ -96,20 +97,39 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 
 	decoded := []gopacket.LayerType{}
 
-	for fragment := range packetSource.Packets() {
+	incomingBuffer := make(chan []byte, 1000)
+	err := f.attackerCapture.RegisterWithErrorFunc(
+		ctx,
+		func(a nflog.Attribute) int {
+			incomingBuffer <- *a.Payload
+			return 0
+		},
+		func(err error) int {
+			log.WithError(err).Debug("nflog")
+			return 0
+		},
+	)
+	if err != nil {
+		log.WithError(err).Info("register nflog listener")
+		return err
+	}
+
+	for {
 		if ctx.Err() != nil {
 			return nil
 		}
+		if err := ipParser.DecodeLayers(<-incomingBuffer, &decoded); err != nil {
+			log.WithError(err).Warn("ip: decoding layers")
+			continue
+		}
 
-		ipv4FragmentLayer := fragment.Layer(layers.LayerTypeIPv4)
-		if ipv4FragmentLayer == nil {
+		if len(decoded) < 1 || decoded[0] != layers.LayerTypeIPv4 {
 			// Ignore everything that is not IPv4.
 			continue
 		}
-		ipv4Fragment := ipv4FragmentLayer.(*layers.IPv4)
 
 		// Defragment packets to we can send them the beehive in one piece.
-		ipv4, err := f.defragger.DefragIPv4(ipv4Fragment)
+		ipv4, err := f.defragger.DefragIPv4(&ipv4)
 		if err != nil {
 			return fmt.Errorf("defragment: %w", err)
 		}
@@ -202,7 +222,6 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 			return fmt.Errorf("send packet to beehive: %w", err)
 		}
 	}
-	return nil
 }
 
 func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
