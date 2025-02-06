@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/netip"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,7 +23,7 @@ func main() {
 
 	log.WithField("BindAddress", args.BindAddress).Info("Starting bee...")
 
-	err := run(args.BindAddress, args.DisableNftables, args.BeekeeperBasePath)
+	err := run(args)
 	if err != nil {
 		log.WithError(err).Fatal("failed to run")
 	}
@@ -38,17 +37,17 @@ func recoverPanic(signalChannel chan os.Signal) {
 	}
 }
 
-func run(bindAddress netip.Addr, disableNftables bool, beekeeperBasePath string) error {
+func run(args arguments) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	bee, err := startBee(ctx, beekeeperBasePath)
+	bee, err := startBee(ctx, args.BeekeeperBasePath)
 	if err != nil {
 		return fmt.Errorf("starting bee failed: %w", err)
 	}
 
-	if !disableNftables {
-		err = nftables.ConfigureNftables(bindAddress.String())
+	if !args.DisableNftables {
+		err = nftables.ConfigureNftables(args.BindAddress.String(), args.IgnoredTCPPorts, args.IgnoredUDPPorts)
 		if err != nil {
 			return fmt.Errorf("configuring nftables: %w", err)
 		}
@@ -59,13 +58,13 @@ func run(bindAddress netip.Addr, disableNftables bool, beekeeperBasePath string)
 		}()
 	}
 
-	forwarder, err := forward.NewForwarder(bindAddress, bee.WireGuardIP, bee.WireGuardPrivateKey, bee.BeehiveIPRange)
+	forwarder, err := forward.NewForwarder(args.BindAddress, bee.WireGuardIP, bee.WireGuardPrivateKey, bee.BeehiveIPRange)
 	if err != nil {
 		return fmt.Errorf("creating new forwarder: %w", err)
 	}
 	defer forwarder.Close()
 
-	heartbeat, err := heartbeat.NewHeartbeat(ctx, bee, forwarder, bindAddress)
+	heartbeat, err := heartbeat.NewHeartbeat(ctx, bee, forwarder, args.BindAddress)
 	if err != nil {
 		return fmt.Errorf("creating heartbeat service: %w", err)
 	}

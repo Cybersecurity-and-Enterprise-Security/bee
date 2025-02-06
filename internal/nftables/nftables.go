@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -19,7 +20,7 @@ import (
 //go:embed bee-nftables.conf
 var templateNftables string
 
-func ConfigureNftables(listenIP string) error {
+func ConfigureNftables(listenIP string, ignoredTcpPorts, ignoredUdpPorts []int) error {
 	// Open the proc filesystem to read open ports
 	pfs, err := procfs.NewDefaultFS()
 	if err != nil {
@@ -39,10 +40,13 @@ func ConfigureNftables(listenIP string) error {
 		return fmt.Errorf("installing base nftables: %w", err)
 	}
 
+	tcpPorts = mergeAndSortPorts(tcpPorts, ignoredTcpPorts)
+	udpPorts = mergeAndSortPorts(udpPorts, ignoredUdpPorts)
+
 	log.
-		WithField("tcp", tcpPorts).
-		WithField("udp", udpPorts).
-		Info("Not exposing ports because local applications are listening on them")
+		WithField("ignoredTCP", tcpPorts).
+		WithField("ignoredUDP", udpPorts).
+		Info("Not exposing ports because they are ignored or local applications are listening on them")
 
 	if err := addOpenTCPPorts(tcpPorts...); err != nil {
 		return fmt.Errorf("adding open tcp ports: %w", err)
@@ -60,7 +64,7 @@ func RemoveNftables() error {
 	return runNftablesCommand(cmd)
 }
 
-func getOpenTCPPorts(pfs procfs.FS, listenIP string) ([]uint64, error) {
+func getOpenTCPPorts(pfs procfs.FS, listenIP string) ([]int, error) {
 	// Read the TCP connection information
 	ipv4TcpConns, err := pfs.NetTCP()
 	if err != nil {
@@ -72,7 +76,7 @@ func getOpenTCPPorts(pfs procfs.FS, listenIP string) ([]uint64, error) {
 	}
 
 	// Extract the open ports from the TCP connections
-	ports := make(map[uint64]struct{})
+	ports := make(map[int]struct{})
 	tcpConns := make(procfs.NetTCP, 0, len(ipv4TcpConns)+len(ipv6TcpConns))
 	tcpConns = append(tcpConns, ipv4TcpConns...)
 	tcpConns = append(tcpConns, ipv6TcpConns...)
@@ -81,19 +85,19 @@ func getOpenTCPPorts(pfs procfs.FS, listenIP string) ([]uint64, error) {
 		// for the list of states.
 		if conn.St == netlink.TCP_LISTEN && conn.Inode != 0 {
 			if conn.LocalAddr.Equal(net.IPv4zero) || conn.LocalAddr.Equal(net.ParseIP(listenIP)) {
-				ports[conn.LocalPort] = struct{}{}
+				ports[int(conn.LocalPort)] = struct{}{}
 			}
 		}
 	}
 
-	portList := make([]uint64, 0, len(ports))
+	portList := make([]int, 0, len(ports))
 	for port := range ports {
 		portList = append(portList, port)
 	}
 	return portList, nil
 }
 
-func getOpenUDPPorts(pfs procfs.FS, listenIP string) ([]uint64, error) {
+func getOpenUDPPorts(pfs procfs.FS, listenIP string) ([]int, error) {
 	// Read the UDP connection information
 	ipv4UdpConns, err := pfs.NetUDP()
 	if err != nil {
@@ -105,7 +109,7 @@ func getOpenUDPPorts(pfs procfs.FS, listenIP string) ([]uint64, error) {
 	}
 
 	// Extract the open ports from the UDP connections
-	ports := make(map[uint64]struct{})
+	ports := make(map[int]struct{})
 	udpConns := make(procfs.NetTCP, 0, len(ipv4UdpConns)+len(ipv6UdpConns))
 	udpConns = append(udpConns, ipv4UdpConns...)
 	udpConns = append(udpConns, ipv6UdpConns...)
@@ -116,12 +120,12 @@ func getOpenUDPPorts(pfs procfs.FS, listenIP string) ([]uint64, error) {
 		// Maybe, we could only use the ports whose remote address is null, or even those in state 7.
 		if conn.Inode != 0 {
 			if conn.LocalAddr.Equal(net.IPv4zero) || conn.LocalAddr.Equal(net.ParseIP(listenIP)) {
-				ports[conn.LocalPort] = struct{}{}
+				ports[int(conn.LocalPort)] = struct{}{}
 			}
 		}
 	}
 
-	portList := make([]uint64, 0, len(ports))
+	portList := make([]int, 0, len(ports))
 	for port := range ports {
 		portList = append(portList, port)
 	}
@@ -139,14 +143,14 @@ func installBaseNftables(listenIP string) error {
 	return nil
 }
 
-func addOpenTCPPorts(ports ...uint64) error {
+func addOpenTCPPorts(ports ...int) error {
 	if len(ports) == 0 {
 		return nil
 	}
 
 	portsString := make([]string, 0, len(ports))
 	for _, p := range ports {
-		portsString = append(portsString, strconv.Itoa(int(p)))
+		portsString = append(portsString, strconv.Itoa(p))
 	}
 
 	cmd := nftablesCommand(
@@ -165,14 +169,14 @@ func addOpenTCPPorts(ports ...uint64) error {
 	return nil
 }
 
-func addOpenUDPPorts(ports ...uint64) error {
+func addOpenUDPPorts(ports ...int) error {
 	if len(ports) == 0 {
 		return nil
 	}
 
 	portsString := make([]string, 0, len(ports))
 	for _, p := range ports {
-		portsString = append(portsString, strconv.Itoa(int(p)))
+		portsString = append(portsString, strconv.Itoa(p))
 	}
 
 	cmd := nftablesCommand(
@@ -212,4 +216,13 @@ func runNftablesCommand(cmd *exec.Cmd) error {
 	}
 
 	return nil
+}
+
+func mergeAndSortPorts(openPorts, ignoredPorts []int) []int {
+	ports := []int{}
+	ports = append(ports, openPorts...)
+	ports = append(ports, ignoredPorts...)
+	slices.Sort(ports)
+	ports = slices.Compact(ports)
+	return ports
 }
