@@ -100,6 +100,7 @@ func (f *Forwarder) setupAttackerCapture(bind netip.Addr) error {
 	f.iface = iface
 
 	nf, err := nflog.Open(&nflog.Config{
+		// Group ID 833 is an arbitrary value but must match the one in nftables.
 		Group:    833,
 		Copymode: nflog.CopyPacket,
 		// Push to userspace after 10 ms
@@ -109,6 +110,7 @@ func (f *Forwarder) setupAttackerCapture(bind netip.Addr) error {
 		return err
 	}
 
+	// Disable error reporting when the queue is full.
 	if err := nf.SetOption(syscall.NETLINK_NO_ENOBUFS, true); err != nil {
 		return fmt.Errorf("failed to set netlink NO_ENOBUFS option: %v", err)
 	}

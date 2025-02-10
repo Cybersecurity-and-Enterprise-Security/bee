@@ -231,6 +231,13 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 	var ipv4 layers.IPv4
 	var udp layers.UDP
 	var tcp layers.TCP
+	// We use separate parsers for the outer geneve layer we added ourselves and the inner layers for the attacker.
+	// We cannot use a single parser for both, because if the beehive wants to send a packet from or to the geneve port,
+	// the parser would produce a packet of the structure [geneve - ip - udp - geneve]. This is because layers.UDP guesses
+	// the next layer from the src/dst ports. If we parsed UDP and geneve in the same parser, we could thus unintentionally parse
+	// the payload of UDP packets. We now parse these separately, so UDP.NextLayerType can still be geneve, but the parser
+	// does not have a DecodingLayer for geneve. Because IgnoreUnsupported is true, parsing terminates and the UDP payload
+	// stays opaque, as it should.
 	geneveParser := gopacket.NewDecodingLayerParser(layers.LayerTypeGeneve, &geneve)
 	geneveParser.IgnoreUnsupported = true
 	innerParser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ipv4, &udp, &tcp)
