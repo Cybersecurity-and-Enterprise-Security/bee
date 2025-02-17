@@ -7,10 +7,10 @@ import (
 	"net/netip"
 	"syscall"
 
+	"github.com/florianl/go-nflog/v2"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/ip4defrag"
 	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -20,7 +20,7 @@ import (
 const GenevePort = 6081
 
 type Forwarder struct {
-	attackerCapture  *pcap.Handle // Handle to capture packets from the attacker
+	attackerCapture  *nflog.Nflog // Handle to capture packets from the attacker
 	attackerInjectFd int          // File descriptor of the socket for sending packets to the attacker
 	beehiveConn      *net.UDPConn // Geneve connection to the beehive
 	listenAddress    netip.Addr   // address on which the bee listens for packets from the attacker
@@ -74,8 +74,6 @@ func NewForwarder(bind netip.Addr, wireguardAddress, wireguardPrivateKey, beehiv
 }
 
 func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
-	packetSource := gopacket.NewPacketSource(f.attackerCapture, layers.LinkTypeEthernet)
-
 	geneve := layers.Geneve{
 		Protocol: layers.EthernetTypeIPv4, // IPv4 content
 	}
@@ -86,9 +84,12 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 		ComputeChecksums: true,
 	}
 
+	ipv4 := layers.IPv4{}
 	udp := layers.UDP{}
 	tcp := layers.TCP{}
 
+	ipParser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ipv4)
+	ipParser.IgnoreUnsupported = true
 	udpParser := gopacket.NewDecodingLayerParser(layers.LayerTypeUDP, &udp)
 	udpParser.IgnoreUnsupported = true
 	tcpParser := gopacket.NewDecodingLayerParser(layers.LayerTypeTCP, &tcp)
@@ -96,20 +97,39 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 
 	decoded := []gopacket.LayerType{}
 
-	for fragment := range packetSource.Packets() {
+	incomingBuffer := make(chan []byte, 1000)
+	err := f.attackerCapture.RegisterWithErrorFunc(
+		ctx,
+		func(a nflog.Attribute) int {
+			incomingBuffer <- *a.Payload
+			return 0
+		},
+		func(err error) int {
+			log.WithError(err).Debug("nflog")
+			return 0
+		},
+	)
+	if err != nil {
+		log.WithError(err).Info("register nflog listener")
+		return err
+	}
+
+	for {
 		if ctx.Err() != nil {
 			return nil
 		}
+		if err := ipParser.DecodeLayers(<-incomingBuffer, &decoded); err != nil {
+			log.WithError(err).Warn("ip: decoding layers")
+			continue
+		}
 
-		ipv4FragmentLayer := fragment.Layer(layers.LayerTypeIPv4)
-		if ipv4FragmentLayer == nil {
+		if len(decoded) < 1 || decoded[0] != layers.LayerTypeIPv4 {
 			// Ignore everything that is not IPv4.
 			continue
 		}
-		ipv4Fragment := ipv4FragmentLayer.(*layers.IPv4)
 
 		// Defragment packets to we can send them the beehive in one piece.
-		ipv4, err := f.defragger.DefragIPv4(ipv4Fragment)
+		ipv4, err := f.defragger.DefragIPv4(&ipv4)
 		if err != nil {
 			return fmt.Errorf("defragment: %w", err)
 		}
@@ -202,7 +222,6 @@ func (f *Forwarder) AttackerToBeehiveLoop(ctx context.Context) error {
 			return fmt.Errorf("send packet to beehive: %w", err)
 		}
 	}
-	return nil
 }
 
 func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
@@ -212,8 +231,17 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 	var ipv4 layers.IPv4
 	var udp layers.UDP
 	var tcp layers.TCP
-	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeGeneve, &geneve, &ipv4, &udp, &tcp)
-	parser.IgnoreUnsupported = true
+	// We use separate parsers for the outer geneve layer we added ourselves and the inner layers for the attacker.
+	// We cannot use a single parser for both, because if the beehive wants to send a packet from or to the geneve port,
+	// the parser would produce a packet of the structure [geneve - ip - udp - geneve]. This is because layers.UDP guesses
+	// the next layer from the src/dst ports. If we parsed UDP and geneve in the same parser, we could thus unintentionally parse
+	// the payload of UDP packets. We now parse these separately, so UDP.NextLayerType can still be geneve, but the parser
+	// does not have a DecodingLayer for geneve. Because IgnoreUnsupported is true, parsing terminates and the UDP payload
+	// stays opaque, as it should.
+	geneveParser := gopacket.NewDecodingLayerParser(layers.LayerTypeGeneve, &geneve)
+	geneveParser.IgnoreUnsupported = true
+	innerParser := gopacket.NewDecodingLayerParser(layers.LayerTypeIPv4, &ipv4, &udp, &tcp)
+	innerParser.IgnoreUnsupported = true
 	decoded := []gopacket.LayerType{}
 
 	packetBuffer := gopacket.NewSerializeBuffer()
@@ -236,13 +264,23 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 			return fmt.Errorf("receive packet: %w", err)
 		}
 
-		if err := parser.DecodeLayers(buffer[:n], &decoded); err != nil {
-			log.WithError(err).Warn("decoding layers")
+		if err := geneveParser.DecodeLayers(buffer[:n], &decoded); err != nil {
+			log.WithError(err).Warn("decoding geneve")
 			continue
 		}
 
-		if len(decoded) < 2 || decoded[0] != layers.LayerTypeGeneve || decoded[1] != layers.LayerTypeIPv4 {
-			fmt.Printf("packet has wrong structure: %s\n", decoded)
+		if len(decoded) < 1 || decoded[0] != layers.LayerTypeGeneve {
+			log.WithField("layers", decoded).Warn("packet is not geneve")
+			continue
+		}
+
+		if err := innerParser.DecodeLayers(geneve.Payload, &decoded); err != nil {
+			log.WithError(err).Warn("decoding inner layers")
+			continue
+		}
+
+		if len(decoded) < 1 || decoded[0] != layers.LayerTypeIPv4 {
+			log.WithField("layers", decoded).Warn("inner packet has wrong structure")
 			continue
 		}
 
@@ -253,8 +291,8 @@ func (f *Forwarder) BeehiveToAttackerLoop(ctx context.Context) error {
 			// However, if that should occur at some point, just create a new buffer instead of clearing the old one.
 			packetBuffer = gopacket.NewSerializeBuffer()
 		}
-		if len(decoded) >= 3 {
-			switch decoded[2] {
+		if len(decoded) >= 2 {
+			switch decoded[1] {
 			case layers.LayerTypeUDP:
 				if err := udp.SetNetworkLayerForChecksum(&ipv4); err != nil {
 					log.WithError(err).Warn("udp: setting network layer for checksum")
