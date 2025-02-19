@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"net"
+	"net/netip"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -20,7 +21,8 @@ import (
 //go:embed bee-nftables.conf
 var templateNftables string
 
-func ConfigureNftables(listenIP string, ignoredTcpPorts, ignoredUdpPorts []int) error {
+func ConfigureNftables(listenAddress netip.Addr, ignoredTcpPorts, ignoredUdpPorts []int) error {
+	listenIP := net.IP(listenAddress.AsSlice())
 	// Open the proc filesystem to read open ports
 	pfs, err := procfs.NewDefaultFS()
 	if err != nil {
@@ -64,7 +66,12 @@ func RemoveNftables() error {
 	return runNftablesCommand(cmd)
 }
 
-func getOpenTCPPorts(pfs procfs.FS, listenIP string) ([]int, error) {
+// socketsConflict returns true if a socket listening on ip conflicts with.
+func socketsConflict(ip, listen net.IP) bool {
+	return ip.IsUnspecified() || ip.Equal(listen)
+}
+
+func getOpenTCPPorts(pfs procfs.FS, listenIP net.IP) ([]int, error) {
 	// Read the TCP connection information
 	ipv4TcpConns, err := pfs.NetTCP()
 	if err != nil {
@@ -84,7 +91,7 @@ func getOpenTCPPorts(pfs procfs.FS, listenIP string) ([]int, error) {
 		// See https://github.com/torvalds/linux/blob/master/include/net/tcp_states.h#L22
 		// for the list of states.
 		if conn.St == netlink.TCP_LISTEN && conn.Inode != 0 {
-			if conn.LocalAddr.Equal(net.IPv4zero) || conn.LocalAddr.Equal(net.ParseIP(listenIP)) {
+			if socketsConflict(conn.LocalAddr, listenIP) {
 				ports[int(conn.LocalPort)] = struct{}{}
 			}
 		}
@@ -97,7 +104,7 @@ func getOpenTCPPorts(pfs procfs.FS, listenIP string) ([]int, error) {
 	return portList, nil
 }
 
-func getOpenUDPPorts(pfs procfs.FS, listenIP string) ([]int, error) {
+func getOpenUDPPorts(pfs procfs.FS, listenIP net.IP) ([]int, error) {
 	// Read the UDP connection information
 	ipv4UdpConns, err := pfs.NetUDP()
 	if err != nil {
@@ -110,7 +117,7 @@ func getOpenUDPPorts(pfs procfs.FS, listenIP string) ([]int, error) {
 
 	// Extract the open ports from the UDP connections
 	ports := make(map[int]struct{})
-	udpConns := make(procfs.NetTCP, 0, len(ipv4UdpConns)+len(ipv6UdpConns))
+	udpConns := make(procfs.NetUDP, 0, len(ipv4UdpConns)+len(ipv6UdpConns))
 	udpConns = append(udpConns, ipv4UdpConns...)
 	udpConns = append(udpConns, ipv6UdpConns...)
 	for _, conn := range udpConns {
@@ -119,7 +126,7 @@ func getOpenUDPPorts(pfs procfs.FS, listenIP string) ([]int, error) {
 		// For now, we use all UDP ports to better be safe than sorry.
 		// Maybe, we could only use the ports whose remote address is null, or even those in state 7.
 		if conn.Inode != 0 {
-			if conn.LocalAddr.Equal(net.IPv4zero) || conn.LocalAddr.Equal(net.ParseIP(listenIP)) {
+			if socketsConflict(conn.LocalAddr, listenIP) {
 				ports[int(conn.LocalPort)] = struct{}{}
 			}
 		}
@@ -132,7 +139,7 @@ func getOpenUDPPorts(pfs procfs.FS, listenIP string) ([]int, error) {
 	return portList, nil
 }
 
-func installBaseNftables(listenIP string) error {
+func installBaseNftables(listenIP net.IP) error {
 	cmd := nftablesCommand("-f", "-")
 	cmd.Stdin = strings.NewReader(fmt.Sprintf(templateNftables, listenIP))
 
