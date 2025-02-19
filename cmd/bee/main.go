@@ -122,6 +122,8 @@ func run(args arguments) error {
 	if ok {
 		log.WithField("signal", sig).Info("Received signal, shutting down")
 	}
+	// Cancel before the other closing functions run.
+	cancel()
 
 	return nil
 }

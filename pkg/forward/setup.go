@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/florianl/go-nflog/v2"
+	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.zx2c4.com/wireguard/wgctrl"
@@ -170,22 +171,24 @@ func (f *Forwarder) closeNetns() error {
 }
 
 // Close cleans up the network setup that was created when creating a new forwarder.
-func (f *Forwarder) Close() error {
+func (f *Forwarder) Close() {
+	// Intentionally do not return on error, we try to clean up as much as possible.
 	if err := f.closeBeehiveConnection(); err != nil {
-		return fmt.Errorf("closing beehive connection: %w", err)
+		log.WithError(err).Error("closing beehive connection")
 	}
 
 	if err := f.closeWireguard(); err != nil {
-		return fmt.Errorf("closing wireguard: %w", err)
+		log.WithError(err).Error("closing wireguard")
 	}
 
 	if err := f.closeNetns(); err != nil {
-		return fmt.Errorf("closing network namespace: %w", err)
+		log.WithError(err).Error("closing network namespace")
 	}
 
-	if err := f.attackerCapture.Close(); err != nil {
-		return fmt.Errorf("closing nflog: %w", err)
-	}
-
-	return nil
+	go func() {
+		// This might hang if the context was not canceled.
+		if err := f.attackerCapture.Close(); err != nil {
+			log.WithError(err).Error("closing nflog")
+		}
+	}()
 }
