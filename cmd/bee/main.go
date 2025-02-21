@@ -47,7 +47,7 @@ func run(args arguments) error {
 	}
 
 	if !args.DisableNftables {
-		err = nftables.ConfigureNftables(args.BindAddress.String(), args.IgnoredTCPPorts, args.IgnoredUDPPorts)
+		err = nftables.ConfigureNftables(args.BindAddress, args.IgnoredTCPPorts, args.IgnoredUDPPorts)
 		if err != nil {
 			return fmt.Errorf("configuring nftables: %w", err)
 		}
@@ -122,6 +122,8 @@ func run(args arguments) error {
 	if ok {
 		log.WithField("signal", sig).Info("Received signal, shutting down")
 	}
+	// Cancel before the other closing functions run.
+	cancel()
 
 	return nil
 }

@@ -9,6 +9,7 @@ services:
       - data:/etc/bee
     environment:
       - BEE_REGISTRATION_TOKEN=...
+    command: ["-ignoredTcpPorts", "", "-ignoredUdpPorts", ""]
 
 volumes:
   data:
