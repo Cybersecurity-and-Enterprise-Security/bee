@@ -32,7 +32,10 @@ Also, make sure that your endpoint configuration in the frontend blocks your ope
 1. Create a new endpoint in the Beekeeper using the frontend or API directly.
 1. Copy the registration token.
 1. **Note**: Both versions (Docker and binary) choose an IP address to bind to by default [based on your default routes](cmd/bee/args.go). Usually, this should be correct. If your host retrieves the external traffic on a separate IP address, adjust it using the `-bind <ipAddress>` flag.
-1. If you do not want to forward specific ports, use the `-ignoredTcpPorts` and `-ignoredUdpPorts` variables. These are comma-separated lists of port ranges, where each range is only one port or `start-end`, e.g. `1-1023,2222`.
+1. If you do not want to forward specific ports, e.g. if you need **SSH access** to the bee via its bound ip, use the `-ignoredTcpPorts` and `-ignoredUdpPorts` command line arguments. These are comma-separated lists of port ranges, where each range is only one port or `start-end`, e.g. `1-1023,2222`.
+    In addition to these, the bee looks for listening sockets on the address at startup and does not forward these. You can see the ignored ports in the log output at startup.
+
+**IF YOUR PRIMARY ACCESS TO THE MACHINE IS THROUGH THE BOUND ADDRESS, DOUBLE-CHECK THAT `-ignoredTcpPorts` INCLUDES ALL PORTS YOU NEED FOR ACCESS. YOU MIGHT BE LOCKED OUT OTHERWISE.**
 
 ### Docker (recommended)
 
